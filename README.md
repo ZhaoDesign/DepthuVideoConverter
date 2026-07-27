@@ -72,7 +72,7 @@ Open **http://localhost:7860**.  No Python, no ffmpeg — everything inside the 
 | Control | Default | What it does |
 |---|---|---|
 | **Model Size** | Small | Small (~95 MB) / Base (~372 MB) / Large (~1.2 GB). Larger = better quality, slower. |
-| **Output Resolution** | Original | Downscale to speed up processing (480p / 720p / 1080p). |
+| **Output Resolution** | Original | Downscale to speed up processing. 480p / 720p / 1080p set target height only; width follows the uploaded video's aspect ratio. |
 | **Invert Black & White** | Off | Swap near ↔ far. |
 | **Temporal Smoothing** | 60 | 0 = off. 100 = max (less flicker, possible ghosting). |
 | **Preserve Original Audio** | On | Copy the original audio track into output. |

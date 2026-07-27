@@ -6,6 +6,8 @@
 
 # --- Web UI ---
 gradio>=4.0,<6.0
+huggingface_hub<1.0
+pydantic<2.11
 
 # --- Deep-learning runtime ---
 torch>=2.1
@@ -14,6 +16,7 @@ torchvision>=0.16
 # --- Image / video processing ---
 opencv-python>=4.8
 numpy>=1.24
+imageio-ffmpeg>=0.6
 
 # --- REST API server (desktop sidecar) ---
 fastapi>=0.110

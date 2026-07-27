@@ -28,10 +28,10 @@ from .ffmpeg import (
 )
 from .models import (
     MODEL_DEFS,
-    RESOLUTION_PRESETS,
     detect_device,
     ensure_checkpoint,
     load_model,
+    output_size_for_resolution,
 )
 from .smoothing import TemporalSmoother, depth_to_grayscale
 
@@ -98,11 +98,11 @@ def process_video(
     # 0. Validate inputs
     # ------------------------------------------------------------------
     if not input_video_path:
-        raise RuntimeError("Please upload a video file first.")
+        raise RuntimeError("请先上传视频文件。")
 
     if not ffmpeg_available():
         raise RuntimeError(
-            "ffmpeg is required but was not found.\n\n"
+            "需要 ffmpeg，但系统中未找到。\n\n"
             "macOS:  brew install ffmpeg\n"
             "Windows: winget install ffmpeg"
         )
@@ -119,7 +119,7 @@ def process_video(
     # ------------------------------------------------------------------
     cap = cv2.VideoCapture(input_video_path)
     if not cap.isOpened():
-        raise RuntimeError(f"Could not open video file: {input_video_path}")
+        raise RuntimeError(f"无法打开视频文件：{input_video_path}")
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -128,13 +128,14 @@ def process_video(
 
     if total_frames < 1:
         cap.release()
-        raise RuntimeError("Video contains no frames.")
+        raise RuntimeError("视频中没有可处理的画面。")
 
-    target_res = RESOLUTION_PRESETS[resolution_choice]
-    if target_res is None:
-        out_w, out_h = orig_w, orig_h
-    else:
-        out_w, out_h = target_res
+    if orig_w < 1 or orig_h < 1:
+        cap.release()
+        raise RuntimeError("无法读取视频尺寸。")
+
+    out_w, out_h = output_size_for_resolution(orig_w, orig_h, resolution_choice)
+    _report(0.04, f"输入尺寸 {orig_w}×{orig_h}｜输出尺寸 {out_w}×{out_h}")
 
     # ------------------------------------------------------------------
     # 3. Extract original audio (if requested)
@@ -143,7 +144,7 @@ def process_video(
     audio_path = os.path.join(tmp_dir, "audio.m4a") if preserve_audio else None
     has_audio = False
     if preserve_audio:
-        _report(0.05, "Extracting original audio…")
+        _report(0.05, "正在提取原始音频…")
         has_audio = has_audio_stream(input_video_path)
         if has_audio:
             ok = extract_audio(input_video_path, str(audio_path))
@@ -153,7 +154,7 @@ def process_video(
     # ------------------------------------------------------------------
     # 4. Read all frames into memory
     # ------------------------------------------------------------------
-    _report(0.08, "Reading video frames…")
+    _report(0.08, "正在读取视频画面…")
     raw_frames: list = []
     while True:
         ret, frame = cap.read()
@@ -164,7 +165,7 @@ def process_video(
         raw_frames.append(frame)
     cap.release()
     n_frames = len(raw_frames)
-    _report(0.10, f"Read {n_frames} frames  |  Starting depth inference…")
+    _report(0.10, f"已读取 {n_frames} 帧｜开始深度推理…")
 
     # ------------------------------------------------------------------
     # 5. Depth inference — uses the official infer_image method
@@ -176,15 +177,15 @@ def process_video(
         elapsed = time.time() - inference_start
         if idx > 0:
             eta = (elapsed / idx) * (n_frames - idx)
-            eta_str = f"{eta:.0f}s remaining"
+            eta_str = f"预计剩余 {eta:.0f} 秒"
         else:
-            eta_str = "estimating…"
-        _report(frac, f"Depth inference  {idx + 1}/{n_frames}  |  {eta_str}")
+            eta_str = "正在估算剩余时间…"
+        _report(frac, f"深度推理 {idx + 1}/{n_frames}｜{eta_str}")
 
         depth = model.infer_image(frame_bgr)   # returns float32 ndarray (H, W)
         depth_maps.append(depth)
 
-    _report(0.80, "Depth inference complete  |  Post-processing…")
+    _report(0.80, "深度推理完成｜正在进行后期处理…")
 
     if device_str == "cuda":
         torch.cuda.empty_cache()
@@ -197,7 +198,7 @@ def process_video(
     output_frames: list = []
     for idx, depth in enumerate(depth_maps):
         frac = 0.80 + 0.10 * (idx / max(n_frames, 1))
-        _report(frac, f"Applying smoothing  {idx + 1}/{n_frames}")
+        _report(frac, f"正在应用平滑处理 {idx + 1}/{n_frames}")
         smoothed = smoother.smooth(depth)
         gray = depth_to_grayscale(smoothed, invert=invert_bw)
         # Grayscale → BGR for ffmpeg encoding
@@ -210,7 +211,7 @@ def process_video(
     # ------------------------------------------------------------------
     # 7. Encode output video (H.264 MP4 via ffmpeg pipe)
     # ------------------------------------------------------------------
-    _report(0.90, "Encoding output video (H.264 MP4)…")
+    _report(0.90, "正在编码输出视频（H.264 MP4）…")
     video_no_audio = os.path.join(tmp_dir, "depth_video.mp4")
     stacked = np.stack(output_frames, axis=0)
     write_video_ffmpeg(stacked, fps, video_no_audio)
@@ -221,7 +222,7 @@ def process_video(
     # 8. Mux audio
     # ------------------------------------------------------------------
     if has_audio and audio_path and os.path.exists(str(audio_path)):
-        _report(0.95, "Merging original audio…")
+        _report(0.95, "正在合并原始音频…")
         final_path = os.path.join(tmp_dir, "depth_video_with_audio.mp4")
         merge_audio_video(video_no_audio, str(audio_path), final_path)
         result_path = final_path
@@ -240,5 +241,5 @@ def process_video(
     except OSError:
         pass
 
-    _report(1.0, "Done!")
+    _report(1.0, "转换完成！")
     return output_file

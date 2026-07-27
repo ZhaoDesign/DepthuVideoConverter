@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.request import urlretrieve
@@ -16,7 +17,7 @@ from depth_anything_v2 import DepthAnythingV2
 # ---------------------------------------------------------------------------
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = PROJECT_DIR / "models"
+MODELS_DIR = Path(os.environ.get("DEPTH_MODELS_DIR", PROJECT_DIR / "models")).expanduser()
 
 MODEL_DEFS: Dict[str, dict] = {
     "Small (fastest, ~95 MB)": {
@@ -42,12 +43,44 @@ MODEL_DEFS: Dict[str, dict] = {
     },
 }
 
-RESOLUTION_PRESETS: Dict[str, Optional[Tuple[int, int]]] = {
+RESOLUTION_PRESETS: Dict[str, Optional[int]] = {
     "Original": None,
-    "480p (854×480)": (854, 480),
-    "720p (1280×720)": (1280, 720),
-    "1080p (1920×1080)": (1920, 1080),
+    "480p": 480,
+    "720p": 720,
+    "1080p": 1080,
 }
+
+RESOLUTION_ALIASES: Dict[str, str] = {
+    "480p (854×480)": "480p",
+    "720p (1280×720)": "720p",
+    "1080p (1920×1080)": "1080p",
+}
+
+
+def normalize_resolution_choice(resolution_choice: str) -> str:
+    """Return the canonical resolution preset name."""
+    canonical = RESOLUTION_ALIASES.get(resolution_choice, resolution_choice)
+    if canonical not in RESOLUTION_PRESETS:
+        raise KeyError(resolution_choice)
+    return canonical
+
+
+def output_size_for_resolution(orig_w: int, orig_h: int, resolution_choice: str) -> Tuple[int, int]:
+    """Return output size while preserving the uploaded video's aspect ratio."""
+    canonical = normalize_resolution_choice(resolution_choice)
+    target_h = RESOLUTION_PRESETS[canonical]
+
+    if target_h is None:
+        return orig_w, orig_h
+
+    out_h = _even_dimension(target_h)
+    out_w = _even_dimension(orig_w * (out_h / orig_h))
+    return out_w, out_h
+
+
+def _even_dimension(value: float) -> int:
+    """H.264/yuv420p encoders generally require even dimensions."""
+    return max(2, int(round(value / 2)) * 2)
 
 # Global model cache — lazy load, keep at most one model in memory
 _cached_model: Optional[Tuple[DepthAnythingV2, str]] = None  # (model, model_size_label)
@@ -77,16 +110,13 @@ def download_with_progress(url: str, dest: Path, desc: str, progress) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     def _report(count: int, block_size: int, total_size: int) -> None:
-        if total_size > 0 and progress is not None:
-            frac = min(count * block_size / total_size, 0.10)
-            downloaded = count * block_size
-            progress(frac, desc=f"{desc}  ({downloaded / 1e6:.0f} / {total_size / 1e6:.0f} MB)")
+        return None
 
     if progress is not None:
-        progress(0.0, desc=f"{desc}  connecting…")
+        progress(0.0, f"正在下载模型：{desc}。首次使用可能需要几分钟。")
     urlretrieve(url, str(dest), reporthook=_report)
     if progress is not None:
-        progress(0.10, desc=f"{desc}  complete")
+        progress(0.10, f"模型下载完成：{desc}")
 
 
 def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
@@ -100,7 +130,7 @@ def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
     download_with_progress(
         url=cfg["url"],
         dest=path,
-        desc=f"Downloading {model_size_label}",
+        desc=model_size_label,
         progress=progress,
     )
     return path
@@ -120,6 +150,8 @@ def load_model(model_size_label: str, device_str: str, progress=None) -> DepthAn
 
     cfg = MODEL_DEFS[model_size_label]
     checkpoint_path = ensure_checkpoint(model_size_label, progress)
+    if progress is not None:
+        progress(0.10, f"正在加载模型：{model_size_label}")
 
     # Unload previous model to free memory
     if _cached_model is not None:

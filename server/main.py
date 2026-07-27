@@ -21,9 +21,9 @@ from fastapi.responses import FileResponse
 from depth_converter import (
     MODEL_DEFS,
     MODELS_DIR,
-    RESOLUTION_PRESETS,
     detect_device,
     ffmpeg_available,
+    normalize_resolution_choice,
     process_video,
 )
 
@@ -123,7 +123,9 @@ async def process(
     if model_size_label not in MODEL_DEFS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_size_label}")
 
-    if resolution_choice not in RESOLUTION_PRESETS:
+    try:
+        resolution_choice = normalize_resolution_choice(resolution_choice)
+    except KeyError:
         raise HTTPException(status_code=400, detail=f"Unknown resolution: {resolution_choice}")
 
     # Save uploaded video to a temp file

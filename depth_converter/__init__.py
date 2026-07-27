@@ -14,11 +14,14 @@ from .models import (
     MODEL_DEFS,
     MODELS_DIR,
     PROJECT_DIR,
+    RESOLUTION_ALIASES,
     RESOLUTION_PRESETS,
     detect_device,
     download_with_progress,
     ensure_checkpoint,
     load_model,
+    normalize_resolution_choice,
+    output_size_for_resolution,
 )
 from .smoothing import TemporalSmoother, depth_to_grayscale
 
@@ -29,11 +32,14 @@ __all__ = [
     "MODEL_DEFS",
     "MODELS_DIR",
     "PROJECT_DIR",
+    "RESOLUTION_ALIASES",
     "RESOLUTION_PRESETS",
     "detect_device",
     "download_with_progress",
     "ensure_checkpoint",
     "load_model",
+    "normalize_resolution_choice",
+    "output_size_for_resolution",
     "TemporalSmoother",
     "depth_to_grayscale",
 ]

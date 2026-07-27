@@ -72,7 +72,7 @@ docker compose up
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | **Model Size** | Small | Small (~95 MB) / Base (~372 MB) / Large (~1.2 GB)。越大质量越好，越慢。 |
-| **Output Resolution** | Original | 降分辨率可加速（480p / 720p / 1080p）。 |
+| **Output Resolution** | Original | 降分辨率可加速。480p / 720p / 1080p 只表示目标高度，宽度会按上传视频比例自动计算。 |
 | **Invert Black & White** | 关闭 | 翻转近远关系。 |
 | **Temporal Smoothing** | 60 | 0 = 关闭。100 = 最大（减少闪烁，可能拖影）。 |
 | **Preserve Original Audio** | 开启 | 将原始音轨复制到输出。 |
