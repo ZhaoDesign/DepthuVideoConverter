@@ -107,7 +107,7 @@ def _write_runtime_config(package_dir: Path) -> None:
         encoding="utf-8",
     )
     (package_dir / "使用说明.txt").write_text(
-        "深度视频转换器 Windows 便携版\n\n"
+        "视频深度控制图工具 Windows 便携版\n\n"
         "1. 请先完整解压此压缩包。\n"
         "2. 双击“Depth Video Converter.exe”。\n"
         "3. 稍等片刻，网页操作界面会自动打开，并保留一个小控制窗口。\n"

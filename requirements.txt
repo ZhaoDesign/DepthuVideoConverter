@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# Depth Video Converter — Python dependencies
+# Contour Control Tool — Python dependencies
 #
 # Install:  pip install -r requirements.txt
 # ------------------------------------------------------------------

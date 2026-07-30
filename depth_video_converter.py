@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Depth Video Converter — Convert any video to a depth-map video using Depth Anything V2.
+Contour Control Tool — Convert video to depth-map control video using Depth Anything V2.
 
 Features:
   - Gradio Web UI with MP4 / MOV upload
@@ -32,6 +32,8 @@ from depth_converter import (
     ffmpeg_available,
     process_video,
 )
+
+APP_TITLE = "视频深度控制图工具"
 
 
 # ---------------------------------------------------------------------------
@@ -127,11 +129,11 @@ def create_ui() -> gr.Blocks:
 
     head = CLOSE_TAB_CONFIRM_HEAD if _is_desktop_mode() else None
 
-    with gr.Blocks(css=CSS, title="深度视频转换器", head=head) as demo:
+    with gr.Blocks(css=CSS, title=APP_TITLE, head=head) as demo:
         gr.Markdown(
-            """# 🎥 深度视频转换器
+            """# 视频深度控制图工具
 使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)，
-将 MP4 / MOV 视频转换为**灰度深度图视频**。
+将 MP4 / MOV 视频转换为**灰度深度/轮廓控制视频**，方便作为 AI 视频生成、动画参考和空间运动控制素材。
             """
         )
         gr.HTML(device_html)
@@ -228,7 +230,7 @@ def create_ui() -> gr.Blocks:
 
 def main() -> None:
     print("=" * 58)
-    print("  深度视频转换器 — Depth Anything V2 + Gradio")
+    print(f"  {APP_TITLE} — Depth Anything V2 + Gradio")
     print("=" * 58)
 
     device_str, device_desc = detect_device()

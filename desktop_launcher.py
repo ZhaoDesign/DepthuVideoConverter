@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Desktop entry point for the packaged Depth Video Converter app."""
+"""Desktop entry point for the packaged Contour Control Tool app."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import webbrowser
 from pathlib import Path
 
 
-APP_TITLE = "深度视频转换器"
+APP_TITLE = "视频深度控制图工具"
 APP_DIR_NAME = "DepthVideoConverter"
 DEFAULT_PORT = 7860
 
@@ -85,7 +85,7 @@ def _show_error(message: str) -> None:
     if sys.platform == "darwin":
         script = (
             'on run argv\n'
-            'display alert "深度视频转换器无法启动" message (item 1 of argv) as critical\n'
+            'display alert "视频深度控制图工具无法启动" message (item 1 of argv) as critical\n'
             'end run'
         )
         subprocess.run(["osascript", "-e", script, message], check=False)
@@ -272,7 +272,7 @@ def _show_macos_controller_window(port: int, owns_server: bool) -> bool:
         content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
         window.setContentView_(content)
 
-        title = NSTextField.labelWithString_("深度视频转换器正在运行")
+        title = NSTextField.labelWithString_("视频深度控制图工具正在运行")
         title.setFrame_(NSMakeRect(24, 158, 392, 26))
         title.setFont_(NSFont.boldSystemFontOfSize_(16))
         title.setTextColor_(NSColor.labelColor())
@@ -341,7 +341,7 @@ def _show_tk_controller_window(port: int, owns_server: bool) -> bool:
 
     title = tk.Label(
         frame,
-        text="深度视频转换器正在运行",
+        text="视频深度控制图工具正在运行",
         bg="#F5F6F7",
         fg="#1F2937",
         font=("Helvetica", 16, "bold"),

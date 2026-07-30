@@ -1,99 +1,112 @@
-<p align="right">
-  <a href="README.md">EN</a> | <sub>中文</sub>
-</p>
+# Contour Control Tool｜视频深度控制图工具
 
-<h1 align="center">Depth Video Converter</h1>
+一个本地运行的视频深度控制图生成工具。它使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) 把普通 MP4 / MOV 视频转换成灰度深度视频，可用于 AI 视频生成、ComfyUI 工作流、Seedance / 即梦等视频工具的运动参考、空间结构参考或轮廓控制素材。
 
-<p align="center">
-  使用 <a href="https://github.com/DepthAnything/Depth-Anything-V2">Depth Anything V2</a>
-  将任意视频转换为<strong>灰度深度图视频</strong>。
-  全程本地运行。
-</p>
+近处通常更亮，远处更暗；也可以一键黑白反转。所有处理都在本机完成，视频不会上传到外部服务器。
 
-<p align="center">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-</p>
+## 主要功能
 
----
+- 支持 MP4 / MOV 上传，生成 H.264 MP4 深度视频。
+- 支持 Small / Base / Large 三档 Depth Anything V2 模型。
+- 自动识别 NVIDIA CUDA、Apple Silicon MPS 或 CPU。
+- 支持原始分辨率、480p、720p、1080p 输出。
+- 480p / 720p / 1080p 只表示目标高度，宽度会按原视频比例自动计算，不会压扁画面。
+- 支持时序平滑，减少深度视频闪烁。
+- 支持保留原视频音频。
+- 桌面版提供小控制窗口，可重新打开网页或彻底退出后台。
+- Windows 便携版已内置常用 VC++ 运行库，减少 `c10.dll` / `MSVCP140.dll` 启动报错。
 
-## 效果演示
+## 下载安装
 
-[🎬 并排对比](examples/comparison.mp4) — 左：原始视频 | 右：深度图
+请到 GitHub Releases 下载对应系统的安装包：
 
-> 近处偏亮，远处偏暗。使用 **Large** 模型生成。
+- macOS Apple Silicon：`DepthVideoConverter-macOS-AppleSilicon.dmg`
+- macOS ZIP：`DepthVideoConverter-macOS-AppleSilicon.zip`
+- Windows x64 便携版：`DepthVideoConverter-Windows-x64.zip`
 
----
+Windows 使用时请先完整解压 ZIP，再双击 `Depth Video Converter.exe`。不要只移动 exe，也不要覆盖旧文件夹混用。
 
-## 快速开始
+## 推荐模型
 
-### CLI（最简单）
+| 模型 | 适合场景 | 说明 |
+|---|---|---|
+| Small | 快速预览、批量测试 | 速度最快，质量一般 |
+| Base | 日常推荐 | 质量和速度最均衡 |
+| Large | 最终输出、复杂画面 | 深度细节更好，但更慢、模型更大 |
+
+如果是 15 秒左右的视频，建议优先用 **Base**。如果只是想快速看效果，用 **Small**。画面空间关系复杂、人物遮挡多、需要更稳定的控制素材时，再用 **Large**。
+
+## 桌面版使用
+
+1. 打开应用。
+2. 浏览器会自动弹出本地操作页面。
+3. 上传视频。
+4. 选择模型和输出分辨率。
+5. 点击开始转换。
+6. 完成后下载输出深度视频。
+
+桌面版会保留一个小控制窗口。关闭浏览器后，可以从控制窗口重新打开操作页面；点击“彻底退出应用”会停止本地后台。
+
+## 本地源码运行
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
-cd DepthVideoConverter
-python3 -m venv venv && source venv/bin/activate
+git clone https://github.com/ZhaoDesign/contour-control-tool.git
+cd contour-control-tool
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~372 MB)"
-# 选项：-m (模型), -r (分辨率), -s (平滑), --invert, --no-audio
-```
-
-模型首次使用自动下载。
-
-> **Claude Code 用户？** 安装 Skill 后直接说需求：
-> `/depth-video` — "把这段视频转成深度视频，用 Large 模型"
-
-### Web UI（Gradio）
-
-```bash
 python depth_video_converter.py
-# → http://127.0.0.1:7860
 ```
 
-桌面版打开后会保留一个小控制窗口，方便再次打开网页或彻底退出。关闭浏览器标签页/窗口时会先弹出浏览器自带确认；确认离开后，本地后台也会一起退出。
+打开：
 
-### Docker
+```text
+http://127.0.0.1:7860
+```
+
+## 命令行使用
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
-cd DepthVideoConverter
-docker compose up
+python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~372 MB)"
 ```
 
-浏览器打开 **http://localhost:7860**。无需 Python、ffmpeg，全部在容器内。
+常用参数：
 
-> **NVIDIA GPU？** compose 文件自动启用 GPU。
-> 需 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。
-> Apple Silicon / 纯 CPU 也可以，只是慢一些。
-
----
+```bash
+python depth_video_cli.py input.mp4 \
+  -o output-depth.mp4 \
+  -m "Base (balanced, ~372 MB)" \
+  -r 720p \
+  -s 60
+```
 
 ## 参数说明
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| **Model Size** | Small | Small (~95 MB) / Base (~372 MB) / Large (~1.2 GB)。越大质量越好，越慢。 |
-| **Output Resolution** | Original | 降分辨率可加速。480p / 720p / 1080p 只表示目标高度，宽度会按上传视频比例自动计算。 |
-| **Invert Black & White** | 关闭 | 翻转近远关系。 |
-| **Temporal Smoothing** | 60 | 0 = 关闭。100 = 最大（减少闪烁，可能拖影）。 |
-| **Preserve Original Audio** | 开启 | 将原始音轨复制到输出。 |
+| 模型大小 | Small | Small / Base / Large，越大质量越高、速度越慢 |
+| 输出分辨率 | Original | Original 保持原尺寸；480p / 720p / 1080p 按原比例缩放到目标高度 |
+| 黑白反转 | 关闭 | 交换远近区域明暗 |
+| 时序平滑 | 60 | 数值越高闪烁越少，但可能有拖影 |
+| 保留原始音频 | 开启 | 将原视频音轨合并到输出视频 |
 
-### 模型性能（Apple M4 MPS, 720×1280, 15 秒视频）
+## 打包
 
-| 模型 | 速度 | 15s 视频 | 60s 视频 |
-|---|---|---|---|
-| **Small** | 5.0 fps | 1.5 分钟 | 6 分钟 |
-| **Base** | 2.1 fps | 3.6 分钟 | 14 分钟 |
-| **Large** | 0.7 fps | 10.8 分钟 | 43 分钟 |
+macOS Apple Silicon：
 
-Base 是推荐之选。CUDA 会比 MPS 快约 2–4 倍。
+```bash
+zsh packaging/build_macos.sh /Users/xmiles/Documents/深度视频转化项目
+```
 
----
+Windows x64 便携版：
 
-## 许可证
+```bash
+venv/bin/python packaging/build_windows_portable.py --output-dir /Users/xmiles/Documents/深度视频转化项目
+```
 
-MIT。[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) 使用 Apache 2.0。
+## 说明
 
-模型来自 Hugging Face [depth-anything](https://huggingface.co/depth-anything)。
-基于 [Gradio](https://www.gradio.app/)、[OpenCV](https://opencv.org/)、[ffmpeg](https://ffmpeg.org/) 构建。
+本项目是本地工具，不包含模型权重。首次选择模型时会自动从 Hugging Face 下载 Depth Anything V2 权重。
+
+模型来自 Hugging Face [depth-anything](https://huggingface.co/depth-anything)。  
+Depth Anything V2 使用 Apache 2.0 License，本工具代码使用 MIT License。

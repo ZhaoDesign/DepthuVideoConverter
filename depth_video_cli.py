@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry point for Depth Video Converter — usable by any AI agent or human."""
+"""CLI entry point for Contour Control Tool."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from depth_converter import MODEL_DEFS, RESOLUTION_PRESETS, process_video
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert any video to a depth-map video using Depth Anything V2.",
+        description="Convert any video to a depth-map control video using Depth Anything V2.",
     )
     parser.add_argument("input", help="Path to input video (.mp4 / .mov)")
     parser.add_argument(
