@@ -19,8 +19,10 @@ from pathlib import Path
 
 
 APP_TITLE = "视频深度控制图工具"
+LEGACY_APP_TITLE = "深度视频转换器"
 APP_DIR_NAME = "DepthVideoConverter"
 DEFAULT_PORT = 7860
+PORT_SCAN_COUNT = 50
 
 
 def _user_data_dir() -> Path:
@@ -42,14 +44,30 @@ def _configure_runtime(data_dir: Path) -> None:
     os.environ["DEPTH_DESKTOP_MODE"] = "1"
     os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-    os.environ["NO_PROXY"] = "127.0.0.1,localhost"
-    os.environ["no_proxy"] = "127.0.0.1,localhost"
+    local_no_proxy = "127.0.0.1,localhost,::1"
+    os.environ["NO_PROXY"] = _merge_proxy_bypass(os.environ.get("NO_PROXY"), local_no_proxy)
+    os.environ["no_proxy"] = _merge_proxy_bypass(os.environ.get("no_proxy"), local_no_proxy)
 
     log_path = data_dir / "launcher.log"
     if sys.stdout is None:
         sys.stdout = log_path.open("a", encoding="utf-8", buffering=1)
     if sys.stderr is None:
         sys.stderr = log_path.open("a", encoding="utf-8", buffering=1)
+
+
+def _merge_proxy_bypass(current: str | None, required: str) -> str:
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw_value in (current or "", required):
+        for part in raw_value.split(","):
+            value = part.strip()
+            if value == "[::1]":
+                value = "::1"
+            key = value.lower()
+            if value and key not in seen:
+                values.append(value)
+                seen.add(key)
+    return ",".join(values)
 
 
 def _server_title(port: int) -> str | None:
@@ -72,10 +90,31 @@ def _port_is_free(port: int) -> bool:
 
 
 def _find_port(start: int) -> int:
-    for port in range(start, start + 20):
+    for port in range(start, start + PORT_SCAN_COUNT):
         if _port_is_free(port):
             return port
     raise RuntimeError("没有可用的本地端口，请关闭其他本地服务后重试。")
+
+
+def _local_url_ok(url: str) -> bool:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    request = urllib.request.Request(url, method="GET")
+    for _ in range(5):
+        try:
+            with opener.open(request, timeout=3) as response:
+                return response.status in (200, 401, 302)
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+
+def _configure_gradio_desktop_launch(start_port: int) -> None:
+    from gradio import http_server
+    from gradio import networking
+
+    http_server.INITIAL_PORT_VALUE = start_port
+    http_server.TRY_NUM_PORTS = PORT_SCAN_COUNT
+    networking.url_ok = _local_url_ok
 
 
 def _show_error(message: str) -> None:
@@ -427,27 +466,28 @@ def main() -> None:
     _configure_runtime(data_dir)
 
     requested_port = int(os.environ.get("DEPTH_PORT", str(DEFAULT_PORT)))
-    for port in range(requested_port, requested_port + 20):
-        if _server_title(port) == APP_TITLE:
+    for port in range(requested_port, requested_port + PORT_SCAN_COUNT):
+        if _server_title(port) in {APP_TITLE, LEGACY_APP_TITLE}:
             _open_interface(port)
             _show_controller_window(port, owns_server=False)
             return
 
     try:
-        port = _find_port(requested_port)
         from depth_video_converter import create_ui
         from gradio import utils as gradio_utils
 
+        _configure_gradio_desktop_launch(requested_port)
         gradio_utils.JSON_PATH = str(data_dir / "gradio-launches.json")
         demo = create_ui()
         demo.launch(
             server_name="127.0.0.1",
-            server_port=port,
+            server_port=None,
             share=False,
             show_error=True,
             inbrowser=False,
             prevent_thread_lock=True,
         )
+        port = int(demo.server_port)
         if os.environ.get("DEPTH_NO_BROWSER") != "1":
             _open_interface(port)
         if not _show_controller_window(port, owns_server=True):
