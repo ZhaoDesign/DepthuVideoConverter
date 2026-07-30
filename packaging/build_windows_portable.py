@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import shutil
 import subprocess
 import sys
@@ -47,6 +48,34 @@ def _copy_app(package_dir: Path) -> None:
     )
 
 
+def _copy_windows_runtime_dlls(package_dir: Path) -> None:
+    site_packages = package_dir / "Lib" / "site-packages"
+    patterns = (
+        "concrt*.dll",
+        "msvcp*.dll",
+        "vcamp*.dll",
+        "vccorlib*.dll",
+        "vcomp*.dll",
+        "vcruntime*.dll",
+    )
+    copied: set[str] = set()
+
+    for source_dir in (site_packages, site_packages / "Scripts"):
+        if not source_dir.is_dir():
+            continue
+        for path in source_dir.iterdir():
+            if not path.is_file():
+                continue
+            name = path.name.lower()
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                continue
+            shutil.copy2(path, package_dir / path.name)
+            copied.add(path.name)
+
+    if "msvcp140.dll" not in {name.lower() for name in copied}:
+        raise RuntimeError("Windows 运行库不完整：缺少 MSVCP140.dll")
+
+
 def _build_launcher(package_dir: Path, build_dir: Path) -> None:
     gcc = shutil.which("x86_64-w64-mingw32-gcc")
     windres = shutil.which("x86_64-w64-mingw32-windres")
@@ -81,10 +110,10 @@ def _write_runtime_config(package_dir: Path) -> None:
         "深度视频转换器 Windows 便携版\n\n"
         "1. 请先完整解压此压缩包。\n"
         "2. 双击“Depth Video Converter.exe”。\n"
-        "3. 稍等片刻，网页操作界面会自动打开。\n"
+        "3. 稍等片刻，网页操作界面会自动打开，并保留一个小控制窗口。\n"
         "4. 首次选择模型时会自动下载模型。\n"
-        "5. 退出时请点击网页底部的“退出应用”。\n\n"
-        "请勿单独移动 EXE；它需要同目录中的运行文件。\n"
+        "5. 退出时可点击控制窗口或网页底部的“退出应用”，也可以关闭浏览器标签页/窗口并确认离开。\n\n"
+        "已内置常用 Windows 运行库。请勿单独移动 EXE；它需要同目录中的运行文件。\n"
         "模型位置：%LOCALAPPDATA%\\DepthVideoConverter\\models\n",
         encoding="utf-8-sig",
     )
@@ -145,6 +174,7 @@ def main() -> None:
         str(ROOT / "packaging" / "desktop-requirements.txt"),
     ])
 
+    _copy_windows_runtime_dlls(package_dir)
     _copy_app(package_dir)
     _write_runtime_config(package_dir)
     _build_launcher(package_dir, build_dir)

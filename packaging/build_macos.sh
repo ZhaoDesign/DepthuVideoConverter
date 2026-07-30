@@ -9,7 +9,7 @@ APP_PATH="$BUILD_DIR/dist/DepthVideoConverter.app"
 mkdir -p "$OUTPUT_DIR"
 export GRADIO_ANALYTICS_ENABLED=False
 export HF_HUB_DISABLE_TELEMETRY=1
-"$ROOT/venv/bin/python" -m pip install --upgrade pyinstaller imageio-ffmpeg
+"$ROOT/venv/bin/python" -m pip install --upgrade pyinstaller imageio-ffmpeg pyobjc-framework-Cocoa
 "$ROOT/venv/bin/python" "$ROOT/packaging/generate_icon.py"
 
 rm -rf "$BUILD_DIR/work" "$BUILD_DIR/dist" "$BUILD_DIR/spec"
@@ -29,6 +29,9 @@ mkdir -p "$BUILD_DIR/work" "$BUILD_DIR/dist" "$BUILD_DIR/spec"
   --collect-all gradio \
   --collect-all gradio_client \
   --collect-all imageio_ffmpeg \
+  --hidden-import AppKit \
+  --hidden-import Foundation \
+  --hidden-import objc \
   --collect-submodules depth_anything_v2 \
   --copy-metadata gradio \
   --copy-metadata gradio_client \

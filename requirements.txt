@@ -25,3 +25,6 @@ python-multipart>=0.0.9
 
 # --- Not required but recommended ---
 # accelerate>=0.25   (optional — speeds model loading on multi-GPU setups)
+
+# --- macOS desktop window ---
+pyobjc-framework-Cocoa>=10.0; platform_system == "Darwin"

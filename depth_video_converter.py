@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 import gradio as gr
 import torch
@@ -36,6 +37,21 @@ from depth_converter import (
 # ---------------------------------------------------------------------------
 # Gradio adapter — catch RuntimeError and re-raise as gr.Error for the UI
 # ---------------------------------------------------------------------------
+
+CLOSE_TAB_CONFIRM_HEAD = """
+<script>
+(() => {
+    window.addEventListener("beforeunload", (event) => {
+        event.preventDefault();
+        event.returnValue = "";
+    });
+})();
+</script>
+"""
+
+
+def _is_desktop_mode() -> bool:
+    return os.environ.get("DEPTH_DESKTOP_MODE") == "1"
 
 def _process_video_for_gradio(
     input_video_path: str,
@@ -63,10 +79,19 @@ def _process_video_for_gradio(
 
 def _shutdown_desktop_app() -> None:
     """Stop the packaged desktop process after Gradio sends the click response."""
-    import threading
-
     gr.Info("应用正在退出…")
-    threading.Timer(0.75, lambda: os._exit(0)).start()
+    _schedule_desktop_shutdown()
+
+
+def _shutdown_desktop_app_from_browser_close() -> None:
+    """Stop the packaged desktop process after the browser tab is closed."""
+    _schedule_desktop_shutdown(delay=0.35)
+
+
+def _schedule_desktop_shutdown(delay: float = 0.75) -> None:
+    timer = threading.Timer(delay, lambda: os._exit(0))
+    timer.daemon = True
+    timer.start()
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +125,9 @@ def create_ui() -> gr.Blocks:
         device_label = "CPU（无 GPU 加速）"
     device_html = f'<div class="device-badge {badge_class}">🖥  {device_label}</div>'
 
-    with gr.Blocks(css=CSS, title="深度视频转换器") as demo:
+    head = CLOSE_TAB_CONFIRM_HEAD if _is_desktop_mode() else None
+
+    with gr.Blocks(css=CSS, title="深度视频转换器", head=head) as demo:
         gr.Markdown(
             """# 🎥 深度视频转换器
 使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)，
@@ -172,7 +199,7 @@ def create_ui() -> gr.Blocks:
             outputs=output_video,
         )
 
-        if os.environ.get("DEPTH_DESKTOP_MODE") == "1":
+        if _is_desktop_mode():
             shutdown_btn = gr.Button("退出应用", variant="secondary", size="sm")
             shutdown_btn.click(
                 fn=_shutdown_desktop_app,
@@ -180,6 +207,7 @@ def create_ui() -> gr.Blocks:
                 outputs=None,
                 show_progress="hidden",
             )
+            demo.unload(_shutdown_desktop_app_from_browser_close)
 
         gr.Markdown(
             """---

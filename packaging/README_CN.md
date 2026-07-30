@@ -1,6 +1,6 @@
 # 桌面版打包
 
-桌面启动器会自动打开本地网页界面。模型不会放入安装包，首次选择模型时下载到用户数据目录：
+桌面启动器会自动打开本地网页界面，并保留一个小控制窗口，方便重新打开网页或彻底退出。macOS 版使用原生窗口，Windows 版使用简洁控制窗。关闭浏览器标签页/窗口并确认离开后，本地后台也会一起退出。模型不会放入安装包，首次选择模型时下载到用户数据目录：
 
 - macOS：`~/Library/Application Support/DepthVideoConverter/models`
 - Windows：`%LOCALAPPDATA%\DepthVideoConverter\models`

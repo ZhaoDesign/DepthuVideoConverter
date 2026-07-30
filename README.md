@@ -51,6 +51,8 @@ python depth_video_converter.py
 # → http://127.0.0.1:7860
 ```
 
+In the desktop package, a small control window stays open so you can reopen the page or quit cleanly. Closing the browser tab/window asks for browser confirmation first. If you confirm leaving, the local background process exits too.
+
 ### Docker
 
 ```bash
