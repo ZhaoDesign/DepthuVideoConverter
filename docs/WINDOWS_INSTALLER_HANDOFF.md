@@ -27,6 +27,8 @@ This favors customer compatibility and small release assets. It requires interne
   - Adds a Start Menu uninstall shortcut by default.
   - Adds an optional desktop quick uninstall shortcut.
   - Launch shortcuts point at `%LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe`.
+  - Disables reboot requests from the runtime install step and lets Inno close existing app processes before copying files.
+  - Stops existing `desktop_launcher.py` / runtime `pythonw.exe` processes before file replacement to avoid locked-file restart prompts during upgrades.
 
 - `packaging/windows-web-installer/install_runtime.ps1`
   - Runs after app files are copied.
@@ -118,6 +120,12 @@ E:\Contour Control Tool Space Test\installer\runtime-requirements-cpu.txt
 ```
 
 That same validation exposed a separate transient network failure while downloading package metadata. The dependency install command now uses longer socket timeouts plus connection and incomplete-download retry settings, and the script retries the whole dependency install step up to three times.
+
+The installer was later adjusted after the GUI completion page asked for a computer restart even though the app runtime had installed successfully. The app does not install drivers, services, or system PATH changes, so a restart should not be required. `ContourControlToolSetup.iss` now disables restart requests caused by `[Run]` exit status and tries to close existing app processes before replacing files. A follow-up install log confirmed:
+
+```text
+Need to restart Windows? No
+```
 
 ## GitHub Release Notes Draft
 

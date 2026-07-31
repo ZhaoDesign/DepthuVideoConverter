@@ -26,7 +26,10 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 UsePreviousAppDir=yes
-CloseApplications=no
+AlwaysRestart=no
+RestartIfNeededByRun=no
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,7 +39,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "desktopuninstall"; Description: "Create a desktop quick uninstall shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
 Source: "..\..\depth_video_converter.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\depth_video_cli.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -65,3 +68,19 @@ Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\installer"
 Type: filesandordirs; Name: "{localappdata}\CCT\rt311cpu"
 Type: dirifempty; Name: "{localappdata}\CCT"
+
+[Code]
+procedure StopExistingApp;
+var
+  ResultCode: Integer;
+  PowerShellArgs: String;
+begin
+  PowerShellArgs :=
+    '-NoProfile -ExecutionPolicy Bypass -Command "' +
+    '$procs = Get-CimInstance Win32_Process | Where-Object { ' +
+    '$_.CommandLine -like ''*desktop_launcher.py*'' -or ' +
+    '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' ' +
+    '}; ' +
+    'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }"';
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PowerShellArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
