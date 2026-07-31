@@ -74,6 +74,18 @@ function Invoke-Step {
     & $Action
 }
 
+function ConvertTo-ProcessArgument {
+    param([string]$Argument)
+
+    if ($null -eq $Argument -or $Argument -eq "") {
+        return '""'
+    }
+    if ($Argument -notmatch '[\s"]') {
+        return $Argument
+    }
+    return '"' + ($Argument -replace '"', '\"') + '"'
+}
+
 function Invoke-LoggedProcess {
     param(
         [Parameter(Mandatory = $true)][string]$FileName,
@@ -84,9 +96,13 @@ function Invoke-LoggedProcess {
     $stdout = [System.IO.Path]::GetTempFileName()
     $stderr = [System.IO.Path]::GetTempFileName()
     try {
+        $argumentText = ($Arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join " "
+        if ($WorkingDirectory -ne "") {
+            $WorkingDirectory = [System.IO.Path]::GetFullPath($WorkingDirectory)
+        }
         $startInfo = @{
             FilePath = $FileName
-            ArgumentList = $Arguments
+            ArgumentList = $argumentText
             Wait = $true
             PassThru = $true
             RedirectStandardOutput = $stdout
@@ -111,6 +127,31 @@ function Invoke-LoggedProcess {
     finally {
         Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Invoke-LoggedProcessWithRetry {
+    param(
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [int]$Attempts = 3,
+        [int]$DelaySeconds = 10,
+        [string]$WorkingDirectory = ""
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if ($Attempts -gt 1) {
+            Write-Log ("Attempt {0} of {1}" -f $attempt, $Attempts)
+        }
+        $code = Invoke-LoggedProcess -FileName $FileName -Arguments $Arguments -WorkingDirectory $WorkingDirectory
+        if ($code -eq 0) {
+            return 0
+        }
+        if ($attempt -lt $Attempts) {
+            Write-Log ("Command failed with exit code {0}. Retrying in {1} seconds..." -f $code, $DelaySeconds)
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+    return $code
 }
 
 try {
@@ -176,7 +217,7 @@ try {
 
     $requirements = Join-Path $InstallerDir "runtime-requirements-cpu.txt"
     Invoke-Step "Install application dependencies (CPU runtime)" {
-        $code = Invoke-LoggedProcess -FileName $pythonExe -Arguments @("-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--no-warn-script-location", "-r", $requirements)
+        $code = Invoke-LoggedProcessWithRetry -FileName $pythonExe -Arguments @("-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--no-warn-script-location", "--retries", "10", "--timeout", "120", "--resume-retries", "10", "-r", $requirements) -Attempts 3 -DelaySeconds 15
         if ($code -ne 0) {
             throw "Dependency installation failed."
         }

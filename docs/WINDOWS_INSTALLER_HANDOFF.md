@@ -36,6 +36,9 @@ This favors customer compatibility and small release assets. It requires interne
   - Writes logs to `%LOCALAPPDATA%\DepthVideoConverter\installer.log`.
   - Verifies imports and UI creation before marking the runtime as installed.
   - Installs the heavy runtime into `%LOCALAPPDATA%\CCT\rt311cpu` instead of the chosen app directory. This avoids PyTorch install failures on Windows systems without long path support.
+  - Quotes child-process arguments before calling Python / pip. This is required when customers choose an install directory with spaces, such as `E:\Contour Control Tool`.
+  - Uses extended pip retry and timeout settings for dependency installation, including incomplete download resume retries.
+  - Wraps dependency installation in a three-attempt retry loop so a transient PyPI / PyTorch download failure does not fail the whole installer immediately.
 
 - `packaging/windows-web-installer/runtime-requirements-cpu.txt`
   - Installer runtime dependency list.
@@ -101,6 +104,20 @@ If installation fails, collect:
 ```
 
 The installer was adjusted after a local failure in a deep test path. The original design installed PyTorch under the selected app directory; that failed with a Windows long-path error. The runtime now uses `%LOCALAPPDATA%\CCT\rt311cpu`, which keeps PyTorch's internal include paths short enough for default Windows settings.
+
+The installer was also adjusted after a customer-path test failed at:
+
+```text
+ERROR: Invalid requirement: 'Tool\installer\runtime-requirements-cpu.txt'
+```
+
+Root cause: PowerShell `Start-Process -ArgumentList` joined array arguments without preserving the full `-r` requirements path when the selected app directory contained spaces. `install_runtime.ps1` now quotes each child-process argument before calling Python / pip. A later validation reached the correct full path:
+
+```text
+E:\Contour Control Tool Space Test\installer\runtime-requirements-cpu.txt
+```
+
+That same validation exposed a separate transient network failure while downloading package metadata. The dependency install command now uses longer socket timeouts plus connection and incomplete-download retry settings, and the script retries the whole dependency install step up to three times.
 
 ## GitHub Release Notes Draft
 
