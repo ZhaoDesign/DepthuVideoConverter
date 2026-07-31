@@ -22,9 +22,12 @@
 
 - macOS Apple Silicon：`DepthVideoConverter-macOS-AppleSilicon.dmg`
 - macOS ZIP：`DepthVideoConverter-macOS-AppleSilicon.zip`
+- macOS 通用联网安装器：`ContourControlTool-macOS-WebSetup.dmg`
 - Windows x64 便携版：`DepthVideoConverter-Windows-x64.zip`
 
 Windows 使用时请先完整解压 ZIP，再双击 `Depth Video Converter.exe`。不要只移动 exe，也不要覆盖旧文件夹混用。
+
+macOS 联网安装器首次启动会自动下载运行环境，更适合想要小体积发布包的场景。
 
 ## 推荐模型
 
@@ -97,6 +100,14 @@ macOS Apple Silicon：
 ```bash
 zsh packaging/build_macos.sh /Users/xmiles/Documents/深度视频转化项目
 ```
+
+macOS 通用联网安装器：
+
+```bash
+zsh packaging/build_macos_web_installer.sh /Users/xmiles/Documents/深度视频转化项目
+```
+
+macOS 联网安装器的修改说明和验证步骤见 `docs/MACOS_WEB_INSTALLER_HANDOFF_CN.md`。
 
 Windows x64 便携版：
 

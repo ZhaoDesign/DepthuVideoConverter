@@ -13,6 +13,14 @@ zsh packaging/build_macos.sh /path/to/output
 
 输出 `.app` 压缩包和 `.dmg`。当前脚本使用本机架构构建，因此在 Apple Silicon Mac 上生成 ARM64 应用。
 
+## macOS 通用联网安装器
+
+```bash
+zsh packaging/build_macos_web_installer.sh /path/to/output
+```
+
+输出更小的 `.zip` 和 `.dmg`。应用本体只包含启动器和代码，首次打开时会联网下载 `uv`、Python 和运行依赖，再启动本地网页界面。
+
 ## Windows x64
 
 先安装交叉编译器：
