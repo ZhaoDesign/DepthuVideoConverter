@@ -19,27 +19,36 @@ from depth_anything_v2 import DepthAnythingV2
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = Path(os.environ.get("DEPTH_MODELS_DIR", PROJECT_DIR / "models")).expanduser()
 
+_HF_MIRROR = os.environ.get("HF_MIRROR", "https://hf-mirror.com")
+
+def _model_urls(repo: str, filename: str) -> list[str]:
+    hf_path = f"{repo}/resolve/main/{filename}"
+    return [
+        f"{_HF_MIRROR}/{hf_path}",
+        f"https://huggingface.co/{hf_path}",
+    ]
+
 MODEL_DEFS: Dict[str, dict] = {
     "Small (fastest, ~95 MB)": {
         "encoder": "vits",
         "features": 64,
         "out_channels": [48, 96, 192, 384],
         "path": MODELS_DIR / "depth_anything_v2_vits.pth",
-        "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth",
+        "urls": _model_urls("depth-anything/Depth-Anything-V2-Small", "depth_anything_v2_vits.pth"),
     },
     "Base (balanced, ~372 MB)": {
         "encoder": "vitb",
         "features": 128,
         "out_channels": [96, 192, 384, 768],
         "path": MODELS_DIR / "depth_anything_v2_vitb.pth",
-        "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Base/resolve/main/depth_anything_v2_vitb.pth",
+        "urls": _model_urls("depth-anything/Depth-Anything-V2-Base", "depth_anything_v2_vitb.pth"),
     },
     "Large (best quality, ~1.2 GB)": {
         "encoder": "vitl",
         "features": 256,
         "out_channels": [256, 512, 1024, 1024],
         "path": MODELS_DIR / "depth_anything_v2_vitl.pth",
-        "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth",
+        "urls": _model_urls("depth-anything/Depth-Anything-V2-Large", "depth_anything_v2_vitl.pth"),
     },
 }
 
@@ -104,19 +113,27 @@ def detect_device() -> Tuple[str, str]:
 # Checkpoint download helpers
 # ---------------------------------------------------------------------------
 
-def download_with_progress(url: str, dest: Path, desc: str, progress) -> None:
-    """Download a file with progress updates.  *progress* may be a callable(frac, desc) or None."""
+def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> None:
+    """Try each URL in order until one succeeds."""
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
-    def _report(count: int, block_size: int, total_size: int) -> None:
-        return None
-
     if progress is not None:
         progress(0.0, f"正在下载模型：{desc}。首次使用可能需要几分钟。")
-    urlretrieve(url, str(dest), reporthook=_report)
-    if progress is not None:
-        progress(0.10, f"模型下载完成：{desc}")
+
+    last_error: Exception | None = None
+    for url in urls:
+        try:
+            urlretrieve(url, str(dest))
+            if progress is not None:
+                progress(0.10, f"模型下载完成：{desc}")
+            return
+        except Exception as exc:
+            last_error = exc
+            if dest.exists():
+                dest.unlink(missing_ok=True)
+
+    raise last_error or RuntimeError(f"所有下载地址均失败：{desc}")
 
 
 def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
@@ -128,7 +145,7 @@ def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
         return path
 
     download_with_progress(
-        url=cfg["url"],
+        urls=cfg["urls"],
         dest=path,
         desc=model_size_label,
         progress=progress,
