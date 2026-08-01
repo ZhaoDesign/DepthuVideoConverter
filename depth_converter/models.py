@@ -121,10 +121,24 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
     if progress is not None:
         progress(0.0, f"正在下载模型：{desc}。首次使用可能需要几分钟。")
 
+    def _make_hook(url_label: str):
+        def _report(count: int, block_size: int, total_size: int) -> None:
+            if progress is None or total_size <= 0:
+                return
+            downloaded = count * block_size
+            pct = min(downloaded / total_size, 1.0)
+            mb_done = downloaded / (1024 * 1024)
+            mb_total = total_size / (1024 * 1024)
+            progress(pct * 0.09, f"正在下载模型 ({mb_done:.1f}/{mb_total:.1f} MB)：{url_label}")
+        return _report
+
     last_error: Exception | None = None
-    for url in urls:
+    for i, url in enumerate(urls):
+        source = "镜像" if i == 0 and len(urls) > 1 else "官方"
+        if progress is not None and i > 0:
+            progress(0.0, f"切换到{source}源重试下载：{desc}")
         try:
-            urlretrieve(url, str(dest))
+            urlretrieve(url, str(dest), reporthook=_make_hook(f"{desc} [{source}]"))
             if progress is not None:
                 progress(0.10, f"模型下载完成：{desc}")
             return
