@@ -135,7 +135,7 @@ def process_video(
         raise RuntimeError("无法读取视频尺寸。")
 
     out_w, out_h = output_size_for_resolution(orig_w, orig_h, resolution_choice)
-    _report(0.04, f"输入尺寸 {orig_w}×{orig_h}｜输出尺寸 {out_w}×{out_h}")
+    _report(0.54, f"输入尺寸 {orig_w}×{orig_h}｜输出尺寸 {out_w}×{out_h}")
 
     # ------------------------------------------------------------------
     # 3. Extract original audio (if requested)
@@ -144,7 +144,7 @@ def process_video(
     audio_path = os.path.join(tmp_dir, "audio.m4a") if preserve_audio else None
     has_audio = False
     if preserve_audio:
-        _report(0.05, "正在提取原始音频…")
+        _report(0.55, "正在提取原始音频…")
         has_audio = has_audio_stream(input_video_path)
         if has_audio:
             ok = extract_audio(input_video_path, str(audio_path))
@@ -154,7 +154,7 @@ def process_video(
     # ------------------------------------------------------------------
     # 4. Read all frames into memory
     # ------------------------------------------------------------------
-    _report(0.08, "正在读取视频画面…")
+    _report(0.56, "正在读取视频画面…")
     raw_frames: list = []
     while True:
         ret, frame = cap.read()
@@ -165,7 +165,7 @@ def process_video(
         raw_frames.append(frame)
     cap.release()
     n_frames = len(raw_frames)
-    _report(0.10, f"已读取 {n_frames} 帧｜开始深度推理…")
+    _report(0.58, f"已读取 {n_frames} 帧｜开始深度推理…")
 
     # ------------------------------------------------------------------
     # 5. Depth inference — uses the official infer_image method
@@ -173,7 +173,7 @@ def process_video(
     depth_maps: list = []
     inference_start = time.time()
     for idx, frame_bgr in enumerate(raw_frames):
-        frac = 0.10 + 0.70 * (idx / max(n_frames, 1))
+        frac = 0.58 + 0.30 * (idx / max(n_frames, 1))
         elapsed = time.time() - inference_start
         if idx > 0:
             eta = (elapsed / idx) * (n_frames - idx)
@@ -185,7 +185,7 @@ def process_video(
         depth = model.infer_image(frame_bgr)   # returns float32 ndarray (H, W)
         depth_maps.append(depth)
 
-    _report(0.80, "深度推理完成｜正在进行后期处理…")
+    _report(0.88, "深度推理完成｜正在进行后期处理…")
 
     if device_str == "cuda":
         torch.cuda.empty_cache()
@@ -197,7 +197,7 @@ def process_video(
     smoother = TemporalSmoother(alpha)
     output_frames: list = []
     for idx, depth in enumerate(depth_maps):
-        frac = 0.80 + 0.10 * (idx / max(n_frames, 1))
+        frac = 0.88 + 0.05 * (idx / max(n_frames, 1))
         _report(frac, f"正在应用平滑处理 {idx + 1}/{n_frames}")
         smoothed = smoother.smooth(depth)
         gray = depth_to_grayscale(smoothed, invert=invert_bw)
@@ -211,7 +211,7 @@ def process_video(
     # ------------------------------------------------------------------
     # 7. Encode output video (H.264 MP4 via ffmpeg pipe)
     # ------------------------------------------------------------------
-    _report(0.90, "正在编码输出视频（H.264 MP4）…")
+    _report(0.93, "正在编码输出视频（H.264 MP4）…")
     video_no_audio = os.path.join(tmp_dir, "depth_video.mp4")
     stacked = np.stack(output_frames, axis=0)
     write_video_ffmpeg(stacked, fps, video_no_audio)
@@ -222,7 +222,7 @@ def process_video(
     # 8. Mux audio
     # ------------------------------------------------------------------
     if has_audio and audio_path and os.path.exists(str(audio_path)):
-        _report(0.95, "正在合并原始音频…")
+        _report(0.96, "正在合并原始音频…")
         final_path = os.path.join(tmp_dir, "depth_video_with_audio.mp4")
         merge_audio_video(video_no_audio, str(audio_path), final_path)
         result_path = final_path

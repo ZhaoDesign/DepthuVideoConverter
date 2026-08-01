@@ -563,7 +563,8 @@ class ContourControlWindow(QMainWindow):
     def _on_progress(self, percent: int, description: str) -> None:
         self.progress_bar.setValue(percent)
         self.progress_label.setText(description)
-        self._append_log(f"{percent:3d}%  {description}")
+        if not description.startswith("正在下载模型"):
+            self._append_log(f"{percent:3d}%  {description}")
 
     def _on_finished(self, output_path: str) -> None:
         self.output_path = output_path

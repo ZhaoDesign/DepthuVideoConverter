@@ -122,14 +122,18 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
         progress(0.0, f"正在下载模型：{desc}。首次使用可能需要几分钟。")
 
     def _make_hook(url_label: str):
+        _last_pct = [-1]
         def _report(count: int, block_size: int, total_size: int) -> None:
             if progress is None or total_size <= 0:
                 return
             downloaded = count * block_size
-            pct = min(downloaded / total_size, 1.0)
+            pct = int(min(downloaded / total_size, 1.0) * 100)
+            if pct == _last_pct[0]:
+                return
+            _last_pct[0] = pct
             mb_done = downloaded / (1024 * 1024)
             mb_total = total_size / (1024 * 1024)
-            progress(pct * 0.09, f"正在下载模型 ({mb_done:.1f}/{mb_total:.1f} MB)：{url_label}")
+            progress(pct / 100 * 0.50, f"正在下载模型 ({mb_done:.1f}/{mb_total:.1f} MB)：{url_label}")
         return _report
 
     last_error: Exception | None = None
@@ -140,7 +144,7 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
         try:
             urlretrieve(url, str(dest), reporthook=_make_hook(f"{desc} [{source}]"))
             if progress is not None:
-                progress(0.10, f"模型下载完成：{desc}")
+                progress(0.50, f"模型下载完成：{desc}")
             return
         except Exception as exc:
             last_error = exc
@@ -182,7 +186,7 @@ def load_model(model_size_label: str, device_str: str, progress=None) -> DepthAn
     cfg = MODEL_DEFS[model_size_label]
     checkpoint_path = ensure_checkpoint(model_size_label, progress)
     if progress is not None:
-        progress(0.10, f"正在加载模型：{model_size_label}")
+        progress(0.52, f"正在加载模型：{model_size_label}")
 
     # Unload previous model to free memory
     if _cached_model is not None:
