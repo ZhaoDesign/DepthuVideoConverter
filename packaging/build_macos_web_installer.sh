@@ -28,6 +28,7 @@ cp "$ROOT/assets/depth-video-converter.icns" "$RESOURCES_DIR/depth-video-convert
 cp "$ROOT/README.md" "$APP_SRC_DIR/README.md"
 cp "$ROOT/README_CN.md" "$APP_SRC_DIR/README_CN.md"
 cp "$ROOT/desktop_launcher.py" "$APP_SRC_DIR/desktop_launcher.py"
+cp "$ROOT/desktop_qt_app.py" "$APP_SRC_DIR/desktop_qt_app.py"
 cp "$ROOT/depth_video_converter.py" "$APP_SRC_DIR/depth_video_converter.py"
 cp "$ROOT/depth_video_cli.py" "$APP_SRC_DIR/depth_video_cli.py"
 cp "$ROOT/packaging/macos-web-installer/README_CN.md" "$APP_SRC_DIR/README_WEB_INSTALLER_CN.md"

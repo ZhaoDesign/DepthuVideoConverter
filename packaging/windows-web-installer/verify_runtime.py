@@ -1,4 +1,4 @@
-"""Post-install smoke test for the Windows web installer runtime."""
+"""Post-install smoke test for the Windows native desktop runtime."""
 
 from __future__ import annotations
 
@@ -16,24 +16,22 @@ def main() -> None:
     sys.path.insert(0, str(app_dir))
 
     modules = {
-        "gradio": "gradio",
-        "fastapi": "fastapi",
-        "starlette": "starlette",
         "torch": "torch",
         "torchvision": "torchvision",
         "cv2": "cv2",
         "numpy": "numpy",
         "imageio_ffmpeg": "imageio_ffmpeg",
+        "PySide6": "PySide6",
     }
     versions: dict[str, str] = {}
     for label, module_name in modules.items():
         module = importlib.import_module(module_name)
         versions[label] = str(getattr(module, "__version__", "unknown"))
 
-    from depth_video_converter import create_ui
+    import desktop_qt_app
 
-    ui = create_ui()
-    ui.close()
+    if not hasattr(desktop_qt_app, "ContourControlWindow"):
+        raise RuntimeError("Native desktop entry point is missing.")
 
     print(json.dumps({"ok": True, "versions": versions}, ensure_ascii=False, indent=2))
 

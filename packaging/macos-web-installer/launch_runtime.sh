@@ -154,8 +154,8 @@ main() {
         return 0
     fi
 
-    log "Starting desktop launcher..."
-    exec "$VENV_DIR/bin/python" "$APP_DIR/desktop_launcher.py"
+    log "Starting native desktop app..."
+    exec "$VENV_DIR/bin/python" "$APP_DIR/desktop_qt_app.py"
 }
 
 main "$@"

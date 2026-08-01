@@ -1,38 +1,69 @@
-# 视频深度控制图工具桌面版打包
+# 视频深度控制图工具打包说明
 
-桌面启动器会自动打开本地网页界面，并保留一个小控制窗口，方便重新打开网页或彻底退出。macOS 版使用原生窗口，Windows 版使用简洁控制窗。关闭浏览器标签页/窗口并确认离开后，本地后台也会一起退出。模型不会放入安装包，首次选择模型时下载到用户数据目录：
+当前推荐给客户发布的是 Windows x64 原生桌面安装器：
 
-- macOS：`~/Library/Application Support/DepthVideoConverter/models`
-- Windows：`%LOCALAPPDATA%\DepthVideoConverter\models`
-
-## macOS Apple Silicon
-
-```bash
-zsh packaging/build_macos.sh /path/to/output
+```text
+ContourControlTool-Windows-x64-WebSetup.exe
 ```
 
-输出 `.app` 压缩包和 `.dmg`。当前脚本使用本机架构构建，因此在 Apple Silicon Mac 上生成 ARM64 应用。
+它是小体积联网安装器：安装包只放应用代码、图标和安装脚本，首次安装时再下载 Python、PyTorch、PySide6、OpenCV 和 FFmpeg 运行环境。模型文件也不进入安装包，首次选择模型时下载到用户数据目录。
 
-## macOS 通用联网安装器
+模型缓存位置：
+
+- Windows：`%LOCALAPPDATA%\DepthVideoConverter\models`
+- macOS：`~/Library/Application Support/DepthVideoConverter/models`
+
+## Windows x64 原生桌面安装器
+
+先在 Windows 上安装 Inno Setup 6，然后运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
+```
+
+输出：
+
+```text
+dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
+```
+
+安装后的客户体验：
+
+- 正常安装向导，可选择安装位置。
+- 后台安装运行环境，不显示 PowerShell 窗口。
+- 启动后是 PySide6 原生桌面窗口，不需要浏览器。
+- 桌面和开始菜单都有启动快捷方式。
+- 桌面和开始菜单都有“卸载 视频深度控制图工具”快捷方式。
+- 安装完成后不要求重启。
+
+详细交接和验证记录见：
+
+```text
+docs/WINDOWS_INSTALLER_HANDOFF.md
+```
+
+## macOS
+
+macOS 相关脚本已按原生 UI 方向做准备，但必须在 Mac 上构建、启动、转换短视频验证后再发布。
+
+macOS 联网安装器构建命令：
 
 ```bash
 zsh packaging/build_macos_web_installer.sh /path/to/output
 ```
 
-输出更小的 `.zip` 和 `.dmg`。应用本体只包含启动器和代码，首次打开时会联网下载 `uv`、Python 和运行依赖，再启动本地网页界面。
-
-## Windows x64
-
-先安装交叉编译器：
+旧的 macOS Apple Silicon PyInstaller 包仍可构建：
 
 ```bash
-brew install mingw-w64
+zsh packaging/build_macos.sh /path/to/output
 ```
 
-然后运行：
+## 旧 Windows 便携包
+
+旧便携包脚本还保留在仓库中，但当前不再作为客户首选发布方式：
 
 ```bash
 venv/bin/python packaging/build_windows_portable.py --output-dir /path/to/output
 ```
 
-输出 Windows x64 便携版压缩包。用户完整解压后，双击 `Depth Video Converter.exe` 即可启动。便携包会内置常用 VC++ 运行库，减少 `c10.dll` / `MSVCP140.dll` 启动报错。
+便携包会把运行环境直接打进压缩包，体积明显更大。

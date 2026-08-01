@@ -14,6 +14,7 @@ catch {
 }
 
 $PythonVersion = "3.11.9"
+$RuntimeVersion = "2026.08.01-native-ui.2"
 $PythonZipName = "python-$PythonVersion-embed-amd64.zip"
 $PythonZipUrl = "https://www.python.org/ftp/python/$PythonVersion/$PythonZipName"
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
@@ -154,6 +155,25 @@ function Invoke-LoggedProcessWithRetry {
     return $code
 }
 
+function Test-RuntimeReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$Marker
+    )
+
+    if (-not (Test-Path -LiteralPath $PythonExe)) {
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath $Marker)) {
+        return $false
+    }
+    $markerText = Get-Content -LiteralPath $Marker -Raw -ErrorAction SilentlyContinue
+    if ($markerText -notmatch [regex]::Escape("runtime_version=$RuntimeVersion")) {
+        return $false
+    }
+    return $true
+}
+
 try {
     Write-Log "Installing runtime into: $InstallDir"
     Write-Log "Runtime path: $RuntimeDir"
@@ -166,9 +186,12 @@ try {
     }
 
     $pythonExe = Join-Path $RuntimeDir "python.exe"
-    if ((Test-Path -LiteralPath $MarkerPath) -and (Test-Path -LiteralPath $pythonExe)) {
+    if (Test-RuntimeReady -PythonExe $pythonExe -Marker $MarkerPath) {
         Write-Log "Runtime is already installed. Skipping download."
         exit 0
+    }
+    if (Test-Path -LiteralPath $MarkerPath) {
+        Write-Log "Runtime marker is missing the current runtime version. Reinstalling runtime."
     }
 
     if (Test-Path -LiteralPath $RuntimeDir) {
@@ -231,7 +254,10 @@ try {
         }
     }
 
-    Set-Content -LiteralPath $MarkerPath -Value ("installed=" + (Get-Date -Format o)) -Encoding ASCII
+    Set-Content -LiteralPath $MarkerPath -Value @(
+        "runtime_version=$RuntimeVersion",
+        "installed=" + (Get-Date -Format o)
+    ) -Encoding ASCII
     Write-Log "Runtime installation completed."
 }
 catch {

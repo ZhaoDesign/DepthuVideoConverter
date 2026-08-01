@@ -13,8 +13,8 @@
 - 480p / 720p / 1080p 只表示目标高度，宽度会按原视频比例自动计算，不会压扁画面。
 - 支持时序平滑，减少深度视频闪烁。
 - 支持保留原视频音频。
-- 桌面版提供小控制窗口，可重新打开网页或彻底退出后台。
-- Windows 便携版已内置常用 VC++ 运行库，减少 `c10.dll` / `MSVCP140.dll` 启动报错。
+- Windows x64 安装器提供原生桌面应用窗口，不需要从浏览器打开。
+- 安装器会创建桌面和开始菜单的启动/卸载快捷方式。
 
 ## 下载安装
 
@@ -23,11 +23,11 @@
 - macOS Apple Silicon：`DepthVideoConverter-macOS-AppleSilicon.dmg`
 - macOS ZIP：`DepthVideoConverter-macOS-AppleSilicon.zip`
 - macOS 通用联网安装器：`ContourControlTool-macOS-WebSetup.dmg`
-- Windows x64 便携版：`DepthVideoConverter-Windows-x64.zip`
+- Windows x64 原生桌面安装器：`ContourControlTool-Windows-x64-WebSetup.exe`
 
-Windows 使用时请先完整解压 ZIP，再双击 `Depth Video Converter.exe`。不要只移动 exe，也不要覆盖旧文件夹混用。
+Windows 用户双击 `.exe` 安装器，按向导选择安装位置即可。首次安装需要联网下载 Python / PyTorch / PySide6 等运行环境；首次使用模型时还会下载对应的 Depth Anything V2 权重。
 
-macOS 联网安装器首次启动会自动下载运行环境，更适合想要小体积发布包的场景。
+macOS 联网安装器首次启动会自动下载运行环境，更适合想要小体积发布包的场景。macOS 原生 UI 版本需要在 Mac 上单独构建和验证后发布。
 
 ## 推荐模型
 
@@ -42,13 +42,13 @@ macOS 联网安装器首次启动会自动下载运行环境，更适合想要�
 ## 桌面版使用
 
 1. 打开应用。
-2. 浏览器会自动弹出本地操作页面。
-3. 上传视频。
-4. 选择模型和输出分辨率。
+2. 拖入视频，或点击选择视频。
+3. 选择模型、输出分辨率和平滑参数。
+4. 选择输出文件夹。
 5. 点击开始转换。
-6. 完成后下载输出深度视频。
+6. 完成后点击打开视频或打开文件夹。
 
-桌面版会保留一个小控制窗口。关闭浏览器后，可以从控制窗口重新打开操作页面；点击“彻底退出应用”会停止本地后台。
+Windows 安装器会创建桌面和开始菜单快捷方式，并额外创建“卸载 视频深度控制图工具”快捷方式，方便客户一键卸载。
 
 ## 本地源码运行
 
@@ -58,13 +58,13 @@ cd contour-control-tool
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python depth_video_converter.py
+python desktop_qt_app.py
 ```
 
-打开：
+如果只想运行旧的本地网页界面，也可以运行：
 
-```text
-http://127.0.0.1:7860
+```bash
+python depth_video_converter.py
 ```
 
 ## 命令行使用
@@ -107,13 +107,15 @@ macOS 通用联网安装器：
 zsh packaging/build_macos_web_installer.sh /Users/xmiles/Documents/深度视频转化项目
 ```
 
-macOS 联网安装器的修改说明和验证步骤见 `docs/MACOS_WEB_INSTALLER_HANDOFF_CN.md`。
+macOS 联网安装器的修改说明和验证步骤见 `docs/MACOS_WEB_INSTALLER_HANDOFF_CN.md`。macOS 原生 UI 文件已经准备，但需要在 Mac 上验证后再发布。
 
-Windows x64 便携版：
+Windows x64 原生桌面安装器：
 
-```bash
-venv/bin/python packaging/build_windows_portable.py --output-dir /Users/xmiles/Documents/深度视频转化项目
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
 ```
+
+Windows 安装器的修改说明和验证步骤见 `docs/WINDOWS_INSTALLER_HANDOFF.md`。
 
 ## 说明
 

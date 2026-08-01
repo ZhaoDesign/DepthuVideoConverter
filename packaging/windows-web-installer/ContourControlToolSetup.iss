@@ -12,7 +12,9 @@ AppId={{8E32A2D1-F74A-4B6C-A9D5-3F8B56C0FD22}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\Contour Control Tool
+AppPublisherURL=https://github.com/ZhaoDesign/contour-control-tool
+AppSupportURL=https://github.com/ZhaoDesign/contour-control-tool/issues
+DefaultDirName={localappdata}\Programs\Contour Control Tool
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
@@ -25,7 +27,9 @@ OutputBaseFilename=ContourControlTool-Windows-x64-WebSetup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+SetupLogging=yes
 UsePreviousAppDir=yes
+UsePreviousTasks=no
 AlwaysRestart=no
 RestartIfNeededByRun=no
 CloseApplications=yes
@@ -34,12 +38,50 @@ RestartApplications=no
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Messages]
+SetupWindowTitle=安装 - {#MyAppName}
+WelcomeLabel1=欢迎使用 {#MyAppName} 安装向导
+WelcomeLabel2=此向导将把 {#MyAppName} 安装到您的电脑，并在安装过程中联网准备所需运行环境。整个过程不会打开浏览器或命令行窗口。
+WizardSelectDir=选择安装位置
+SelectDirDesc=选择安装位置
+SelectDirLabel3=安装程序将把 {#MyAppName} 安装到以下文件夹。
+SelectDirBrowseLabel=如需安装到其他位置，请点击“浏览”选择文件夹。
+ReadyLabel1=安装程序已准备好开始安装 {#MyAppName}。
+ReadyLabel2a=点击“安装”开始复制文件、创建快捷方式并安装运行环境。
+InstallingLabel=正在安装 {#MyAppName}，请稍候。
+FinishedHeadingLabel=完成 {#MyAppName} 安装向导
+FinishedLabelNoIcons={#MyAppName} 已安装完成。
+FinishedLabel={#MyAppName} 已安装完成。可通过桌面或开始菜单快捷方式启动，也可以使用卸载快捷方式移除。
+ButtonNext=下一步(&N) >
+ButtonBack=< 上一步(&B)
+ButtonInstall=安装(&I)
+ButtonFinish=完成(&F)
+ButtonCancel=取消
+ButtonBrowse=浏览(&B)...
+ButtonWizardBrowse=浏览(&R)...
+BrowseDialogTitle=选择文件夹
+BrowseDialogLabel=请选择安装文件夹，然后点击“确定”。
+StatusClosingApplications=正在关闭已运行的应用...
+StatusCreateDirs=正在创建文件夹...
+StatusExtractFiles=正在复制应用文件...
+StatusCreateIcons=正在创建快捷方式...
+StatusSavingUninstall=正在写入卸载信息...
+StatusRunProgram=正在准备运行环境...
+UninstallAppTitle=卸载
+UninstallAppFullTitle=卸载 %1
+ConfirmUninstall=确定要完全移除 %1 吗？
+UninstallStatusLabel=正在从电脑中移除 %1，请稍候。
+UninstalledAll=%1 已成功从电脑中移除。
+
+[CustomMessages]
+LaunchProgram=启动 %1
+
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
-Name: "desktopuninstall"; Description: "Create a desktop quick uninstall shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式"; Flags: checkedonce
 
 [Files]
 Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
+Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\depth_video_converter.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\depth_video_cli.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -53,14 +95,18 @@ Source: "runtime-requirements-cpu.txt"; DestDir: "{app}\installer"; Flags: ignor
 Source: "verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_launcher.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_launcher.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"; Tasks: desktopicon
-Name: "{autodesktop}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"; Tasks: desktopuninstall
+Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"
+Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"; Tasks: desktopicon
+Name: "{autodesktop}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install_runtime.ps1"" -InstallDir ""{app}"""; StatusMsg: "正在联网下载并安装运行环境，首次安装可能需要几分钟..."; Flags: waituntilterminated
-Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_launcher.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install_runtime.ps1"" -InstallDir ""{app}"""; StatusMsg: "正在联网下载并安装运行环境，首次安装可能需要几分钟..."; Flags: waituntilterminated runhidden
+Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
+
+[InstallDelete]
+Type: files; Name: "{group}\Uninstall {#MyAppName}.lnk"
+Type: files; Name: "{autodesktop}\Uninstall {#MyAppName}.lnk"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\app"
@@ -79,6 +125,7 @@ begin
     '-NoProfile -ExecutionPolicy Bypass -Command "' +
     '$procs = Get-CimInstance Win32_Process | Where-Object { ' +
     '$_.CommandLine -like ''*desktop_launcher.py*'' -or ' +
+    '$_.CommandLine -like ''*desktop_qt_app.py*'' -or ' +
     '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' ' +
     '}; ' +
     'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }"';

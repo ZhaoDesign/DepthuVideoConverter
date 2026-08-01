@@ -1,77 +1,83 @@
-# Windows x64 Web Installer Handoff
+# Windows x64 Native Installer Handoff
 
-This note records the Windows installer changes so another machine or agent can continue from a clean clone.
+This note records the Windows customer installer work so another machine or agent can continue from a clean clone.
 
-## Goal
+## Current Goal
 
-Create a small GitHub Release installer for Windows 64-bit customers. The installer should let users choose the install location, install app files locally, then download the heavy runtime dependencies during installation instead of shipping a very large portable zip.
+Ship a customer-friendly Windows 64-bit installer for Contour Control Tool:
 
-## Why this path was chosen
+1. A normal installation wizard with install-location selection.
+2. A native desktop application window, not a browser or Gradio page.
+3. Small GitHub Release asset size by downloading the heavy runtime during installation.
+4. Start Menu and desktop launch shortcuts.
+5. Start Menu and desktop quick uninstall shortcuts.
+6. No restart prompt after a successful install.
 
-The previous portable package included a full Python runtime and all Python packages. On the inspected local build, the package `Lib` folder was about 1.76 GB after extraction, with `torch` alone about 1.2 GB. The app source itself is tiny, so bundling PyTorch directly is the main package-size problem.
+macOS parity is prepared at the packaging-file level, but macOS packaging has not been verified from this Windows machine.
 
-The new release path is:
+## Main Changes
 
-1. Ship a small Inno Setup installer.
-2. Include only app source, assets, and installer scripts.
-3. During install, download Python 3.11 embeddable runtime and locked CPU runtime dependencies into a short per-user runtime path.
-4. Keep Depth Anything V2 model files out of the installer. Models are still downloaded on first use into `%LOCALAPPDATA%\DepthVideoConverter\models`.
+- Added `desktop_qt_app.py`
+  - PySide6 native desktop UI.
+  - Drag/drop video input.
+  - Model and output-resolution selectors.
+  - Smoothing slider.
+  - Invert and preserve-audio checkboxes.
+  - Output-folder picker.
+  - Progress bar, log panel, open-output buttons.
+  - Runs conversion in a background Qt worker thread.
 
-This favors customer compatibility and small release assets. It requires internet during installation and first model use.
+- Updated `packaging/windows-web-installer/ContourControlToolSetup.iss`
+  - Launch shortcuts now run `desktop_qt_app.py` with `pythonw.exe`.
+  - Default install location is per-user: `%LOCALAPPDATA%\Programs\Contour Control Tool`.
+  - The user can still choose a custom path, including paths with spaces.
+  - Runtime install runs hidden inside the installer, so customers do not see a PowerShell window.
+  - Chinese installer text is added for the main wizard steps.
+  - Start Menu and desktop uninstall shortcuts are created.
+  - Old English uninstall shortcuts are removed during upgrades.
+  - Restart prompts are disabled for the runtime install step.
 
-## Files Added
+- Updated `packaging/windows-web-installer/install_runtime.ps1`
+  - Runtime marker now includes `runtime_version=2026.08.01-native-ui.2`.
+  - Changing the runtime marker forces older browser-runtime installs to reinstall with PySide6.
+  - Child Python/pip arguments are quoted so install paths with spaces work.
+  - pip dependency install uses retries, longer timeouts, and resume retries.
+  - Runtime installs to `%LOCALAPPDATA%\CCT\rt311cpu` to avoid Windows long-path failures in PyTorch.
 
-- `packaging/windows-web-installer/ContourControlToolSetup.iss`
-  - Inno Setup script for `ContourControlTool-Windows-x64-WebSetup.exe`.
-  - Creates Start Menu and optional desktop shortcuts.
-  - Adds a Start Menu uninstall shortcut by default.
-  - Adds an optional desktop quick uninstall shortcut.
-  - Launch shortcuts point at `%LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe`.
-  - Disables reboot requests from the runtime install step and lets Inno close existing app processes before copying files.
-  - Stops existing `desktop_launcher.py` / runtime `pythonw.exe` processes before file replacement to avoid locked-file restart prompts during upgrades.
+- Updated `packaging/windows-web-installer/runtime-requirements-cpu.txt`
+  - Removed Gradio/FastAPI/Starlette/browser-server dependencies from the Windows customer runtime.
+  - Keeps only native UI and video-processing dependencies:
+    PySide6, PyTorch CPU, TorchVision CPU, OpenCV headless, NumPy, imageio-ffmpeg, and pinned transitive runtime packages.
 
-- `packaging/windows-web-installer/install_runtime.ps1`
-  - Runs after app files are copied.
-  - Downloads Python 3.11.9 embeddable runtime.
-  - Installs pip.
-  - Installs locked CPU runtime dependencies.
-  - Writes logs to `%LOCALAPPDATA%\DepthVideoConverter\installer.log`.
-  - Verifies imports and UI creation before marking the runtime as installed.
-  - Installs the heavy runtime into `%LOCALAPPDATA%\CCT\rt311cpu` instead of the chosen app directory. This avoids PyTorch install failures on Windows systems without long path support.
-  - Quotes child-process arguments before calling Python / pip. This is required when customers choose an install directory with spaces, such as `E:\Contour Control Tool`.
-  - Uses extended pip retry and timeout settings for dependency installation, including incomplete download resume retries.
-  - Wraps dependency installation in a three-attempt retry loop so a transient PyPI / PyTorch download failure does not fail the whole installer immediately.
+- Updated `packaging/windows-web-installer/verify_runtime.py`
+  - Verifies native runtime imports.
+  - Checks `desktop_qt_app.ContourControlWindow` exists.
 
-- `packaging/windows-web-installer/runtime-requirements-cpu.txt`
-  - Installer runtime dependency list.
-  - Uses CPU PyTorch wheels from `https://download.pytorch.org/whl/cpu`.
-  - Locks Gradio / FastAPI / Starlette to avoid the localhost startup failure caused by incompatible Starlette template APIs.
-  - Fully pins the transitive package set that passed the local installer smoke test.
+- Updated macOS packaging preparation
+  - macOS launcher now points to `desktop_qt_app.py`.
+  - macOS runtime verifier checks PySide6/native entry point.
+  - macOS dependency list is trimmed toward the native UI path.
+  - This is preparation only; build and release macOS on an actual Mac before publishing.
 
-- `packaging/windows-web-installer/verify_runtime.py`
-  - Post-install smoke test.
-  - Imports the required libraries and calls `create_ui()`.
+## Why This Design
 
-- `packaging/build_windows_web_installer.ps1`
-  - Builds the Inno Setup installer.
-  - Searches for `ISCC.exe` in Program Files and the current user's local Programs folder.
+The old portable package was too large because it bundled Python, PyTorch, and all packages directly. The app source is small; the heavy parts are the runtime and model files.
 
-- `packaging/windows-web-installer/README_CN.md`
-  - Chinese usage notes for the small Windows web installer.
+The chosen release path:
 
-## Files Changed
+1. Publish a small Inno Setup `.exe`.
+2. Include app source, assets, and installer scripts.
+3. During installation, download Python 3.11 embeddable runtime and locked CPU dependencies.
+4. Download Depth Anything V2 model files only on first use into `%LOCALAPPDATA%\DepthVideoConverter\models`.
 
-- `packaging/desktop-requirements.txt`
-  - Locked `fastapi==0.112.4` and `starlette==0.38.6`.
-  - Locked `opencv-python==4.10.0.84`, `numpy==1.26.4`, and `imageio-ffmpeg==0.6.0`.
-  - This prevents future dependency resolution from pulling `starlette 1.x`, which caused Gradio 4.44.1 to fail when opening the local page.
+This keeps the GitHub Release installer around a few MB. First install still needs internet and downloads roughly hundreds of MB of runtime packages, mainly PyTorch, MKL, PySide6, OpenCV, and bundled FFmpeg.
 
 ## Build Command
 
 Install Inno Setup 6 on Windows, then run from the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.1.0
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
 ```
 
 Expected output:
@@ -80,24 +86,71 @@ Expected output:
 dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
 ```
 
-The generated installer is small because it does not include Python packages or models.
+## Verification Done On 2026-08-01
 
-## Runtime Test Checklist
+Windows installer build:
 
-Use a clean Windows 64-bit test machine or VM:
+```text
+ContourControlTool-Windows-x64-WebSetup.exe
+Size: 2,213,342 bytes
+SHA256: E6E350EB86A59C3336107C6DE86A2B54CDAB4A0C6E024A1310386F56E83F1318
+```
 
-1. Run `ContourControlTool-Windows-x64-WebSetup.exe`.
-2. Choose a custom install path.
-3. Let the installer download the runtime dependencies.
-4. Confirm Start Menu contains:
-   - `视频深度控制图工具`
-   - `Uninstall 视频深度控制图工具`
-5. Launch the app and confirm the local Gradio page opens.
-6. Process a small video with `Small (fastest, ~95 MB)`.
-7. Confirm first-use model download goes to `%LOCALAPPDATA%\DepthVideoConverter\models`.
-8. Use the uninstall shortcut and confirm the install directory is removed.
-   - The installer explicitly removes generated `__pycache__` leftovers under `{app}\app`.
-   - The shared short runtime path `%LOCALAPPDATA%\CCT\rt311cpu` is removed on uninstall.
+Dependency wheel check:
+
+- Windows x64, Python 3.11 wheel download succeeded.
+- 21 wheels resolved.
+- Total wheel download size was about 692 MB.
+- No Gradio/FastAPI/Starlette packages are required by the native runtime.
+
+Install test:
+
+```text
+Install path: E:\Contour Control Tool Native Test
+Runtime path: %LOCALAPPDATA%\CCT\rt311cpu
+Runtime marker: runtime_version=2026.08.01-native-ui.2
+Installer result: Installation process succeeded
+Runtime install exit code: 0
+Need to restart Windows? No
+```
+
+Runtime smoke test:
+
+```text
+torch: 2.3.1+cpu
+torchvision: 0.18.1+cpu
+cv2: 4.10.0
+numpy: 1.26.4
+imageio_ffmpeg: 0.6.0
+PySide6: 6.7.3
+desktop_qt_app.ContourControlWindow: OK
+```
+
+Native window creation test:
+
+```text
+Window title: 视频深度控制图工具
+Window class: ContourControlWindow
+Model choices loaded: 3
+```
+
+Shortcut test:
+
+```text
+Desktop launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\Contour Control Tool Native Test\app\desktop_qt_app.py"
+Desktop uninstall: E:\Contour Control Tool Native Test\unins000.exe
+Start Menu launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\Contour Control Tool Native Test\app\desktop_qt_app.py"
+Start Menu uninstall: E:\Contour Control Tool Native Test\unins000.exe
+```
+
+## Customer Requirements
+
+- Windows 64-bit.
+- Internet access during installation.
+- Internet access on first model use.
+- CPU runtime is the default for compatibility; processing is slower than a GPU build.
+
+## Troubleshooting
 
 If installation fails, collect:
 
@@ -105,46 +158,29 @@ If installation fails, collect:
 %LOCALAPPDATA%\DepthVideoConverter\installer.log
 ```
 
-The installer was adjusted after a local failure in a deep test path. The original design installed PyTorch under the selected app directory; that failed with a Windows long-path error. The runtime now uses `%LOCALAPPDATA%\CCT\rt311cpu`, which keeps PyTorch's internal include paths short enough for default Windows settings.
+The installer log from Inno Setup is available only when run with `/LOG=...`.
 
-The installer was also adjusted after a customer-path test failed at:
+Common failure points:
 
-```text
-ERROR: Invalid requirement: 'Tool\installer\runtime-requirements-cpu.txt'
-```
+- Python download blocked by network policy.
+- PyPI or PyTorch wheel download interrupted.
+- Hugging Face model download blocked on first use.
+- Antivirus blocks unsigned installer/runtime scripts.
 
-Root cause: PowerShell `Start-Process -ArgumentList` joined array arguments without preserving the full `-r` requirements path when the selected app directory contained spaces. `install_runtime.ps1` now quotes each child-process argument before calling Python / pip. A later validation reached the correct full path:
-
-```text
-E:\Contour Control Tool Space Test\installer\runtime-requirements-cpu.txt
-```
-
-That same validation exposed a separate transient network failure while downloading package metadata. The dependency install command now uses longer socket timeouts plus connection and incomplete-download retry settings, and the script retries the whole dependency install step up to three times.
-
-The installer was later adjusted after the GUI completion page asked for a computer restart even though the app runtime had installed successfully. The app does not install drivers, services, or system PATH changes, so a restart should not be required. `ContourControlToolSetup.iss` now disables restart requests caused by `[Run]` exit status and tries to close existing app processes before replacing files. A follow-up install log confirmed:
-
-```text
-Need to restart Windows? No
-```
-
-## GitHub Release Notes Draft
-
-Release asset:
-
-```text
-ContourControlTool-Windows-x64-WebSetup.exe
-```
-
-Suggested description:
+## Release Notes Draft
 
 ```markdown
-Windows x64 web installer for Contour Control Tool.
+Windows x64 native desktop installer for Contour Control Tool.
 
-- Small installer package; runtime dependencies download during installation.
-- Lets users choose the installation path.
-- Models are downloaded on first use into `%LOCALAPPDATA%\DepthVideoConverter\models`.
-- Default runtime uses CPU PyTorch for compatibility. Processing is slower than GPU builds.
-- Includes Start Menu launch and uninstall shortcuts. Optional desktop uninstall shortcut is available during setup.
+- Native desktop app: no browser, no Gradio page.
+- Normal installer wizard with install-location selection.
+- Small installer asset; Python/PyTorch/PySide6 runtime downloads during installation.
+- Uses CPU PyTorch runtime for broad Windows compatibility.
+- Creates desktop and Start Menu launch shortcuts.
+- Creates desktop and Start Menu uninstall shortcuts.
+- Fixed install paths with spaces.
+- Fixed restart prompt after successful installation.
+- Runtime packages are pinned and verified for Windows x64 Python 3.11.
 
 Requirements:
 
@@ -157,9 +193,12 @@ Troubleshooting:
 If installation fails, send `%LOCALAPPDATA%\DepthVideoConverter\installer.log`.
 ```
 
-## Known Tradeoffs
+## Next Mac Step
 
-- First install can take several minutes because PyTorch and related packages are downloaded.
-- CPU runtime is more compatible and smaller than CUDA runtime, but slower.
-- Customers behind strict network filtering may fail to download Python, PyPI packages, PyTorch CPU wheels, or Hugging Face model files.
-- A future GPU installer can be added as a separate larger release asset.
+Do not publish a macOS asset from Windows. On a Mac:
+
+1. Pull the latest repo.
+2. Build the macOS package with `packaging/build_macos_web_installer.sh`.
+3. Verify the native Qt window opens.
+4. Verify model download and a small video conversion.
+5. Then publish a separate macOS release asset.
