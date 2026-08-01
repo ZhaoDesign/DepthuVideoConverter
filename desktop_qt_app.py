@@ -15,6 +15,10 @@ APP_TITLE = "视频深度控制图工具"
 APP_DIR_NAME = "DepthVideoConverter"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 
+_script_dir = str(Path(__file__).resolve().parent)
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 
 def _user_data_dir() -> Path:
     if sys.platform == "darwin":
@@ -60,36 +64,53 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 
 DATA_DIR = _configure_runtime()
 
-from PySide6.QtCore import QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon  # noqa: E402
-from PySide6.QtWidgets import (  # noqa: E402
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QFileDialog,
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QPlainTextEdit,
-    QProgressBar,
-    QSizePolicy,
-    QSlider,
-    QSpacerItem,
-    QVBoxLayout,
-    QWidget,
-)
+try:
+    from PySide6.QtCore import QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
+    from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon  # noqa: E402
+    from PySide6.QtWidgets import (  # noqa: E402
+        QApplication,
+        QCheckBox,
+        QComboBox,
+        QFileDialog,
+        QFrame,
+        QGridLayout,
+        QHBoxLayout,
+        QLabel,
+        QMainWindow,
+        QMessageBox,
+        QPushButton,
+        QPlainTextEdit,
+        QProgressBar,
+        QSizePolicy,
+        QSlider,
+        QSpacerItem,
+        QVBoxLayout,
+        QWidget,
+    )
 
-from depth_converter import (  # noqa: E402
-    MODEL_DEFS,
-    RESOLUTION_PRESETS,
-    detect_device,
-    ffmpeg_available,
-    process_video,
-)
+    from depth_converter import (  # noqa: E402
+        MODEL_DEFS,
+        RESOLUTION_PRESETS,
+        detect_device,
+        ffmpeg_available,
+        process_video,
+    )
+except ImportError:
+    import ctypes
+
+    msg = traceback.format_exc()
+    log_path = DATA_DIR / "crash.log"
+    try:
+        log_path.write_text(msg, encoding="utf-8")
+    except OSError:
+        pass
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        f"运行环境加载失败，请检查安装是否完整。\n\n{msg}\n\n日志: {log_path}",
+        APP_TITLE,
+        0x10,
+    )
+    sys.exit(1)
 
 
 def _asset_path(name: str) -> Path:
@@ -769,4 +790,21 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import ctypes
+
+        msg = traceback.format_exc()
+        log_path = DATA_DIR / "crash.log"
+        try:
+            log_path.write_text(msg, encoding="utf-8")
+        except OSError:
+            pass
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            f"启动失败:\n\n{msg}\n\n日志: {log_path}",
+            APP_TITLE,
+            0x10,
+        )
+        sys.exit(1)

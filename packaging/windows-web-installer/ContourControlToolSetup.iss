@@ -102,7 +102,7 @@ Name: "{autodesktop}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilen
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install_runtime.ps1"" -InstallDir ""{app}"""; StatusMsg: "正在联网下载并安装运行环境，首次安装可能需要几分钟..."; Flags: waituntilterminated runhidden
-Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
+Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked; Check: RuntimeAlreadyInstalled
 
 [InstallDelete]
 Type: files; Name: "{group}\Uninstall {#MyAppName}.lnk"
@@ -116,6 +116,47 @@ Type: filesandordirs; Name: "{localappdata}\CCT\rt311cpu"
 Type: dirifempty; Name: "{localappdata}\CCT"
 
 [Code]
+function RuntimeAlreadyInstalled: Boolean;
+var
+  MarkerPath: String;
+begin
+  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok');
+  Result := FileExists(MarkerPath) and FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\pythonw.exe'));
+end;
+
+function VCRedistInstalled: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{sys}\vcruntime140.dll')) and
+            FileExists(ExpandConstant('{sys}\vcruntime140_1.dll'));
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  MarkerPath: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok');
+    if not FileExists(MarkerPath) then
+    begin
+      MsgBox('运行环境安装未成功完成。可能原因：' + #13#10 +
+             '• 网络连接不稳定' + #13#10 +
+             '• 防火墙阻止下载' + #13#10 +
+             '• 磁盘空间不足' + #13#10 + #13#10 +
+             '请检查日志：' + #13#10 +
+             ExpandConstant('{localappdata}\DepthVideoConverter\installer.log') + #13#10 + #13#10 +
+             '可重新运行安装程序以重试。', mbError, MB_OK);
+    end;
+    if not VCRedistInstalled then
+    begin
+      MsgBox('未检测到 Visual C++ 运行库 (vcruntime140.dll)。' + #13#10 +
+             '应用启动可能失败。' + #13#10 + #13#10 +
+             '请下载安装 Microsoft Visual C++ Redistributable：' + #13#10 +
+             'https://aka.ms/vs/17/release/vc_redist.x64.exe', mbInformation, MB_OK);
+    end;
+  end;
+end;
+
 procedure StopExistingApp;
 var
   ResultCode: Integer;
