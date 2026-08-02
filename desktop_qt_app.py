@@ -919,6 +919,7 @@ class ContourControlWindow(QMainWindow):
 
 def apply_style(app: QApplication) -> None:
     app.setFont(QFont("Microsoft YaHei UI", 10))
+    check_icon = str(_asset_path("checkmark.png")).replace("\\", "/")
     app.setStyleSheet(
         """
         QWidget#root {
@@ -1043,6 +1044,7 @@ def apply_style(app: QApplication) -> None:
         QCheckBox::indicator:checked {
             background: #111827;
             border-color: #111827;
+            image: url(""" + check_icon + """);
         }
         QSlider::groove:horizontal {
             height: 4px;
