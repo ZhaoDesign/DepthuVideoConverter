@@ -17,7 +17,6 @@ from typing import Optional, Protocol
 
 import cv2
 import numpy as np
-import torch
 
 from .ffmpeg import (
     ffmpeg_available,
@@ -30,6 +29,7 @@ from .models import (
     MODEL_DEFS,
     detect_device,
     ensure_checkpoint,
+    infer_depth,
     load_model,
     output_size_for_resolution,
 )
@@ -182,13 +182,10 @@ def process_video(
             eta_str = "正在估算剩余时间…"
         _report(frac, f"深度推理 {idx + 1}/{n_frames}｜{eta_str}")
 
-        depth = model.infer_image(frame_bgr)   # returns float32 ndarray (H, W)
+        depth = infer_depth(model, frame_bgr)
         depth_maps.append(depth)
 
     _report(0.88, "深度推理完成｜正在进行后期处理…")
-
-    if device_str == "cuda":
-        torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------
     # 6. Temporal smoothing + grayscale conversion

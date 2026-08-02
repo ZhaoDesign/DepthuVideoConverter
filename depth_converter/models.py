@@ -1,4 +1,7 @@
-"""Model loading, checkpoint management, and device detection."""
+"""Model loading, checkpoint management, and device detection.
+
+Uses ONNX Runtime for inference — no PyTorch required at runtime.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +11,10 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.request import urlretrieve
 
-import torch
+import cv2
+import numpy as np
+import onnxruntime as ort
 
-from depth_anything_v2 import DepthAnythingV2
-
-# ---------------------------------------------------------------------------
-# Paths & constants
-# ---------------------------------------------------------------------------
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = Path(os.environ.get("DEPTH_MODELS_DIR", PROJECT_DIR / "models")).expanduser()
@@ -29,26 +29,17 @@ def _model_urls(repo: str, filename: str) -> list[str]:
     ]
 
 MODEL_DEFS: Dict[str, dict] = {
-    "Small (fastest, ~95 MB)": {
-        "encoder": "vits",
-        "features": 64,
-        "out_channels": [48, 96, 192, 384],
-        "path": MODELS_DIR / "depth_anything_v2_vits.pth",
-        "urls": _model_urls("depth-anything/Depth-Anything-V2-Small", "depth_anything_v2_vits.pth"),
+    "Small (fastest, ~99 MB)": {
+        "path": MODELS_DIR / "depth_anything_v2_vits.onnx",
+        "urls": _model_urls("onnx-community/depth-anything-v2-small", "onnx/model.onnx"),
     },
-    "Base (balanced, ~372 MB)": {
-        "encoder": "vitb",
-        "features": 128,
-        "out_channels": [96, 192, 384, 768],
-        "path": MODELS_DIR / "depth_anything_v2_vitb.pth",
-        "urls": _model_urls("depth-anything/Depth-Anything-V2-Base", "depth_anything_v2_vitb.pth"),
+    "Base (balanced, ~392 MB)": {
+        "path": MODELS_DIR / "depth_anything_v2_vitb.onnx",
+        "urls": _model_urls("onnx-community/depth-anything-v2-base", "onnx/model.onnx"),
     },
-    "Large (best quality, ~1.2 GB)": {
-        "encoder": "vitl",
-        "features": 256,
-        "out_channels": [256, 512, 1024, 1024],
-        "path": MODELS_DIR / "depth_anything_v2_vitl.pth",
-        "urls": _model_urls("depth-anything/Depth-Anything-V2-Large", "depth_anything_v2_vitl.pth"),
+    "Large (best quality, ~1.3 GB)": {
+        "path": MODELS_DIR / "depth_anything_v2_vitl.onnx",
+        "urls": _model_urls("onnx-community/depth-anything-v2-large", "onnx/model.onnx"),
     },
 }
 
@@ -91,42 +82,35 @@ def _even_dimension(value: float) -> int:
     """H.264/yuv420p encoders generally require even dimensions."""
     return max(2, int(round(value / 2)) * 2)
 
-# Global model cache — lazy load, keep at most one model in memory
-_cached_model: Optional[Tuple[DepthAnythingV2, str]] = None  # (model, model_size_label)
 
+_cached_session: Optional[Tuple[ort.InferenceSession, str]] = None
 
-# ---------------------------------------------------------------------------
-# Device detection
-# ---------------------------------------------------------------------------
 
 def detect_device() -> Tuple[str, str]:
-    """Return (torch_device_str, human_readable_description)."""
-    if torch.cuda.is_available():
-        name = torch.cuda.get_device_name(0) or "NVIDIA GPU"
-        return "cuda", f"CUDA — {name}"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps", "Apple Silicon (MPS)"
-    return "cpu", "CPU (no GPU acceleration)"
+    """Return (provider_key, human_readable_description)."""
+    providers = ort.get_available_providers()
+    if "CUDAExecutionProvider" in providers:
+        return "cuda", "CUDA (GPU 加速)"
+    if "CoreMLExecutionProvider" in providers:
+        return "coreml", "Apple Silicon (CoreML)"
+    return "cpu", "CPU"
 
 
-# ---------------------------------------------------------------------------
-# Checkpoint download helpers
-# ---------------------------------------------------------------------------
-
-def _is_valid_checkpoint(path: Path, min_bytes: int = 1_000_000) -> bool:
-    """Check if a file looks like a valid PyTorch checkpoint (zip with correct header)."""
+def _is_valid_model(path: Path, min_bytes: int = 1_000_000) -> bool:
+    """Check if a file is a valid ONNX model."""
     if not path.is_file():
         return False
     if path.stat().st_size < min_bytes:
         return False
     try:
         with open(path, "rb") as f:
-            header = f.read(4)
-            # PyTorch checkpoints are ZIP files (PK\x03\x04) or legacy pickle
-            if header[:2] == b"PK":
+            header = f.read(8)
+            # ONNX files start with protobuf header (0x08 for field 1 varint)
+            # or with the magic bytes for ONNX external data format
+            if len(header) >= 4 and header[0] == 0x08:
                 return True
-            # Legacy format starts with pickle magic or \x80\x02
-            if header[0] == 0x80:
+            # Also accept ZIP (PK header) for PyTorch checkpoints if present
+            if header[:2] == b"PK":
                 return True
         return False
     except OSError:
@@ -163,7 +147,7 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
             progress(0.0, f"切换到{source}源重试下载：{desc}")
         try:
             urlretrieve(url, str(dest), reporthook=_make_hook(f"{desc} [{source}]"))
-            if not _is_valid_checkpoint(dest):
+            if not _is_valid_model(dest):
                 if dest.exists():
                     dest.unlink(missing_ok=True)
                 raise RuntimeError(f"下载的文件无效（可能为网页错误或下载不完整）")
@@ -183,10 +167,9 @@ def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
     cfg = MODEL_DEFS[model_size_label]
     path = cfg["path"]
 
-    if path.is_file() and _is_valid_checkpoint(path):
+    if path.is_file() and _is_valid_model(path):
         return path
 
-    # Remove invalid/incomplete file if present
     if path.exists():
         path.unlink(missing_ok=True)
 
@@ -199,51 +182,96 @@ def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
     return path
 
 
-# ---------------------------------------------------------------------------
-# Model loading
-# ---------------------------------------------------------------------------
+def _ort_providers(device_str: str) -> list[str]:
+    """Return the ONNX Runtime execution providers for the given device."""
+    if device_str == "cuda":
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if device_str == "coreml":
+        return ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
 
-def load_model(model_size_label: str, device_str: str, progress=None) -> DepthAnythingV2:
-    """Return a loaded DepthAnythingV2 model, reusing cached instance when possible."""
-    global _cached_model
 
-    # Reuse cached model if the same size was already loaded
-    if _cached_model is not None and _cached_model[1] == model_size_label:
-        return _cached_model[0]
+def load_model(model_size_label: str, device_str: str, progress=None) -> ort.InferenceSession:
+    """Return a loaded ONNX Runtime session, reusing cached instance when possible."""
+    global _cached_session
 
-    cfg = MODEL_DEFS[model_size_label]
+    if _cached_session is not None and _cached_session[1] == model_size_label:
+        return _cached_session[0]
+
     checkpoint_path = ensure_checkpoint(model_size_label, progress)
     if progress is not None:
         progress(0.52, f"正在加载模型：{model_size_label}")
 
-    # Unload previous model to free memory
-    if _cached_model is not None:
-        del _cached_model
+    if _cached_session is not None:
+        del _cached_session
         gc.collect()
-        if device_str == "cuda":
-            torch.cuda.empty_cache()
 
-    device = torch.device(device_str)
-    model = DepthAnythingV2(
-        encoder=cfg["encoder"],
-        features=cfg["features"],
-        out_channels=cfg["out_channels"],
-    )
-
+    providers = _ort_providers(device_str)
     try:
-        state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+        session = ort.InferenceSession(str(checkpoint_path), providers=providers)
     except Exception:
-        # Checkpoint is corrupted — delete and re-download
         checkpoint_path.unlink(missing_ok=True)
         if progress is not None:
             progress(0.0, "模型文件损坏，正在重新下载…")
         checkpoint_path = ensure_checkpoint(model_size_label, progress)
         if progress is not None:
             progress(0.52, f"正在加载模型：{model_size_label}")
-        state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+        session = ort.InferenceSession(str(checkpoint_path), providers=providers)
 
-    model.load_state_dict(state_dict)
-    model = model.to(device).eval()
+    _cached_session = (session, model_size_label)
+    return session
 
-    _cached_model = (model, model_size_label)
-    return model
+
+# ---------------------------------------------------------------------------
+# Preprocessing & inference (pure numpy + cv2, no PyTorch needed)
+# ---------------------------------------------------------------------------
+
+_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+
+def _constrain_to_multiple(x: float, multiple: int, min_val: int) -> int:
+    y = int(np.round(x / multiple) * multiple)
+    if y < min_val:
+        y = int(np.ceil(x / multiple) * multiple)
+    return y
+
+
+def preprocess_image(raw_image: np.ndarray, input_size: int = 518) -> Tuple[np.ndarray, int, int]:
+    """Prepare a BGR frame for ONNX model input.
+
+    Returns (input_tensor, orig_h, orig_w).
+    input_tensor has shape [1, 3, H, W] in float32.
+    """
+    h, w = raw_image.shape[:2]
+
+    scale = max(input_size / h, input_size / w)
+    new_h = _constrain_to_multiple(scale * h, 14, input_size)
+    new_w = _constrain_to_multiple(scale * w, 14, input_size)
+
+    image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
+    image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+    image = image.astype(np.float32) / 255.0
+
+    image = (image - _MEAN) / _STD
+
+    image = np.transpose(image, (2, 0, 1))
+    image = np.expand_dims(image, axis=0).astype(np.float32)
+
+    return image, h, w
+
+
+def infer_depth(session: ort.InferenceSession, raw_image: np.ndarray, input_size: int = 518) -> np.ndarray:
+    """Run depth inference on a single BGR frame. Returns float32 depth map (H, W)."""
+    input_tensor, orig_h, orig_w = preprocess_image(raw_image, input_size)
+
+    input_name = session.get_inputs()[0].name
+    output_name = session.get_outputs()[0].name
+    result = session.run([output_name], {input_name: input_tensor})[0]
+
+    depth = result.squeeze()
+
+    if depth.shape[0] != orig_h or depth.shape[1] != orig_w:
+        depth = cv2.resize(depth, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+    return depth.astype(np.float32)

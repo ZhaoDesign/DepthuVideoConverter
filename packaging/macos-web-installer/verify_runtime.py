@@ -16,7 +16,7 @@ def main() -> None:
     sys.path.insert(0, str(app_dir))
 
     modules = {
-        "torch": "torch",
+        "onnxruntime": "onnxruntime",
         "cv2": "cv2",
         "numpy": "numpy",
         "imageio_ffmpeg": "imageio_ffmpeg",

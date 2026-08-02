@@ -14,7 +14,7 @@ catch {
 }
 
 $PythonVersion = "3.11.9"
-$RuntimeVersion = "2026.08.02-slim-deps"
+$RuntimeVersion = "2026.08.02-onnx"
 $PythonZipName = "python-$PythonVersion-embed-amd64.zip"
 $PythonZipUrl = "https://www.python.org/ftp/python/$PythonVersion/$PythonZipName"
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"

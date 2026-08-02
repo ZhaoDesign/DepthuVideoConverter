@@ -372,7 +372,7 @@ class ContourControlWindow(QMainWindow):
 
         self.model_combo = QComboBox()
         self.model_combo.addItems(list(MODEL_DEFS.keys()))
-        self.model_combo.setCurrentText("Small (fastest, ~95 MB)")
+        self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
 
         self.resolution_combo = QComboBox()
         self.resolution_combo.addItems(list(RESOLUTION_PRESETS.keys()))
