@@ -113,8 +113,28 @@ def detect_device() -> Tuple[str, str]:
 # Checkpoint download helpers
 # ---------------------------------------------------------------------------
 
+def _is_valid_checkpoint(path: Path, min_bytes: int = 1_000_000) -> bool:
+    """Check if a file looks like a valid PyTorch checkpoint (zip with correct header)."""
+    if not path.is_file():
+        return False
+    if path.stat().st_size < min_bytes:
+        return False
+    try:
+        with open(path, "rb") as f:
+            header = f.read(4)
+            # PyTorch checkpoints are ZIP files (PK\x03\x04) or legacy pickle
+            if header[:2] == b"PK":
+                return True
+            # Legacy format starts with pickle magic or \x80\x02
+            if header[0] == 0x80:
+                return True
+        return False
+    except OSError:
+        return False
+
+
 def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> None:
-    """Try each URL in order until one succeeds."""
+    """Try each URL in order until one succeeds with a valid file."""
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -143,6 +163,10 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
             progress(0.0, f"切换到{source}源重试下载：{desc}")
         try:
             urlretrieve(url, str(dest), reporthook=_make_hook(f"{desc} [{source}]"))
+            if not _is_valid_checkpoint(dest):
+                if dest.exists():
+                    dest.unlink(missing_ok=True)
+                raise RuntimeError(f"下载的文件无效（可能为网页错误或下载不完整）")
             if progress is not None:
                 progress(0.50, f"模型下载完成：{desc}")
             return
@@ -159,8 +183,12 @@ def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
     cfg = MODEL_DEFS[model_size_label]
     path = cfg["path"]
 
-    if path.is_file():
+    if path.is_file() and _is_valid_checkpoint(path):
         return path
+
+    # Remove invalid/incomplete file if present
+    if path.exists():
+        path.unlink(missing_ok=True)
 
     download_with_progress(
         urls=cfg["urls"],
@@ -202,7 +230,18 @@ def load_model(model_size_label: str, device_str: str, progress=None) -> DepthAn
         out_channels=cfg["out_channels"],
     )
 
-    state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+    try:
+        state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+    except Exception:
+        # Checkpoint is corrupted — delete and re-download
+        checkpoint_path.unlink(missing_ok=True)
+        if progress is not None:
+            progress(0.0, "模型文件损坏，正在重新下载…")
+        checkpoint_path = ensure_checkpoint(model_size_label, progress)
+        if progress is not None:
+            progress(0.52, f"正在加载模型：{model_size_label}")
+        state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+
     model.load_state_dict(state_dict)
     model = model.to(device).eval()
 

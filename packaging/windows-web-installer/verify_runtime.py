@@ -17,7 +17,6 @@ def main() -> None:
 
     modules = {
         "torch": "torch",
-        "torchvision": "torchvision",
         "cv2": "cv2",
         "numpy": "numpy",
         "imageio_ffmpeg": "imageio_ffmpeg",
