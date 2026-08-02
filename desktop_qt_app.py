@@ -71,6 +71,7 @@ try:
         QApplication,
         QCheckBox,
         QComboBox,
+        QDialog,
         QFileDialog,
         QFrame,
         QGridLayout,
@@ -153,6 +154,56 @@ def _short_path(path: str, max_chars: int = 62) -> str:
     if len(path) <= max_chars:
         return path
     return "..." + path[-(max_chars - 3):]
+
+
+class StyledDialog(QDialog):
+    """Custom dialog matching the white Codex theme."""
+
+    def __init__(self, parent, title: str, message: str, kind: str = "info"):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedWidth(380)
+        self.setStyleSheet("""
+            QDialog { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; }
+            QLabel#dialogTitle { color: #111827; font-size: 15px; font-weight: 600; }
+            QLabel#dialogMsg { color: #374151; font-size: 13px; }
+            QPushButton#dialogBtn {
+                background: #111827; color: #FFFFFF; border: none;
+                border-radius: 8px; padding: 10px 24px; font-weight: 600; font-size: 13px;
+            }
+            QPushButton#dialogBtn:hover { background: #374151; }
+            QPushButton#dialogBtnSecondary {
+                background: #F3F4F6; color: #374151; border: none;
+                border-radius: 8px; padding: 10px 24px; font-weight: 600; font-size: 13px;
+            }
+            QPushButton#dialogBtnSecondary:hover { background: #E5E7EB; }
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(12)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("dialogTitle")
+        layout.addWidget(title_label)
+
+        msg_label = QLabel(message)
+        msg_label.setObjectName("dialogMsg")
+        msg_label.setWordWrap(True)
+        layout.addWidget(msg_label)
+
+        layout.addSpacing(8)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        ok_btn = QPushButton("确定")
+        ok_btn.setObjectName("dialogBtn")
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+
+def _show_dialog(parent, title: str, message: str, kind: str = "info") -> None:
+    dlg = StyledDialog(parent, title, message, kind)
+    dlg.exec()
 
 
 class VideoPlayer(QFrame):
@@ -476,7 +527,7 @@ class ContourControlWindow(QMainWindow):
 
         help_menu = mb.addMenu("帮助")
         about_act = QAction("关于", self)
-        about_act.triggered.connect(lambda: QMessageBox.about(self, "关于", f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool"))
+        about_act.triggered.connect(lambda: _show_dialog(self, "关于", f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool"))
         help_menu.addAction(about_act)
         github_act = QAction("GitHub 主页", self)
         github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
@@ -770,10 +821,10 @@ class ContourControlWindow(QMainWindow):
         if self.worker_thread is not None and self.worker_thread.isRunning():
             return
         if not self.input_path or not Path(self.input_path).is_file():
-            QMessageBox.warning(self, APP_TITLE, "请先选择一个视频文件。")
+            _show_dialog(self, APP_TITLE, "请先选择一个视频文件。")
             return
         if not ffmpeg_available():
-            QMessageBox.warning(self, APP_TITLE, "FFmpeg 未就绪，无法编码输出视频。")
+            _show_dialog(self, APP_TITLE, "FFmpeg 未就绪，无法编码输出视频。")
             return
 
         output_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
@@ -824,7 +875,7 @@ class ContourControlWindow(QMainWindow):
         self._append_log(f"完成：{output_path}")
         self._video_player.load(output_path)
         self._switch_player("out")
-        QMessageBox.information(self, APP_TITLE, "转换完成。")
+        _show_dialog(self, APP_TITLE, "转换完成。")
 
     def _on_failed(self, message: str) -> None:
         self.state_label.setText("失败")
@@ -832,7 +883,7 @@ class ContourControlWindow(QMainWindow):
         self.result_label.setText("转换失败")
         self._set_controls_enabled(True)
         self._append_log(f"失败：{message}")
-        QMessageBox.critical(self, APP_TITLE, message)
+        _show_dialog(self, APP_TITLE, message)
 
     def _clear_worker(self) -> None:
         self.worker = None
@@ -860,7 +911,7 @@ class ContourControlWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.worker_thread is not None and self.worker_thread.isRunning():
-            QMessageBox.information(self, APP_TITLE, "转换正在进行，请完成后再关闭。")
+            _show_dialog(self, APP_TITLE, "转换正在进行，请完成后再关闭。")
             event.ignore()
             return
         event.accept()
