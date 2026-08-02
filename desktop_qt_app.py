@@ -65,8 +65,8 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 DATA_DIR = _configure_runtime()
 
 try:
-    from PySide6.QtCore import QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon  # noqa: E402
+    from PySide6.QtCore import QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
+    from PySide6.QtGui import QAction, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QImage, QPixmap  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
         QApplication,
         QCheckBox,
@@ -77,6 +77,7 @@ try:
         QHBoxLayout,
         QLabel,
         QMainWindow,
+        QMenuBar,
         QMessageBox,
         QPushButton,
         QPlainTextEdit,
@@ -90,11 +91,14 @@ try:
 
     from depth_converter import (  # noqa: E402
         MODEL_DEFS,
+        MODELS_DIR,
         RESOLUTION_PRESETS,
         detect_device,
         ffmpeg_available,
         process_video,
     )
+
+    import cv2  # noqa: E402
 except ImportError:
     import ctypes
 
@@ -149,6 +153,141 @@ def _short_path(path: str, max_chars: int = 62) -> str:
     if len(path) <= max_chars:
         return path
     return "..." + path[-(max_chars - 3):]
+
+
+class VideoPlayer(QFrame):
+    """Lightweight video player using OpenCV + QLabel + QTimer."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("videoPlayer")
+        self._cap: cv2.VideoCapture | None = None
+        self._playing = False
+        self._fps = 30.0
+        self._frame_count = 0
+        self._current_frame = 0
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self._display = QLabel()
+        self._display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._display.setMinimumHeight(200)
+        self._display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._display.setStyleSheet("background: #000000; border-radius: 8px;")
+        layout.addWidget(self._display, 1)
+
+        controls = QHBoxLayout()
+        controls.setSpacing(8)
+        self._play_btn = QPushButton("▶")
+        self._play_btn.setObjectName("secondaryButton")
+        self._play_btn.setFixedSize(36, 36)
+        self._play_btn.clicked.connect(self._toggle_play)
+        controls.addWidget(self._play_btn)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(0, 0)
+        self._slider.sliderPressed.connect(self._on_slider_press)
+        self._slider.sliderReleased.connect(self._on_slider_release)
+        controls.addWidget(self._slider, 1)
+
+        self._time_label = QLabel("0:00 / 0:00")
+        self._time_label.setObjectName("muted")
+        self._time_label.setFixedWidth(100)
+        controls.addWidget(self._time_label)
+        layout.addLayout(controls)
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._next_frame)
+        self._slider_dragging = False
+
+    def load(self, path: str) -> None:
+        self.stop()
+        if self._cap:
+            self._cap.release()
+        self._cap = cv2.VideoCapture(path)
+        if not self._cap.isOpened():
+            self._display.setText("无法打开视频")
+            return
+        self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._frame_count = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._current_frame = 0
+        self._slider.setRange(0, max(self._frame_count - 1, 0))
+        self._slider.setValue(0)
+        self._show_frame(0)
+        self._update_time()
+
+    def stop(self) -> None:
+        self._playing = False
+        self._timer.stop()
+        self._play_btn.setText("▶")
+
+    def _toggle_play(self) -> None:
+        if not self._cap:
+            return
+        if self._playing:
+            self.stop()
+        else:
+            self._playing = True
+            self._play_btn.setText("⏸")
+            self._timer.start(int(1000 / self._fps))
+
+    def _next_frame(self) -> None:
+        if not self._cap or not self._playing:
+            return
+        ret, frame = self._cap.read()
+        if not ret:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self._current_frame = 0
+            self.stop()
+            return
+        self._current_frame = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
+        self._render_frame(frame)
+        if not self._slider_dragging:
+            self._slider.setValue(self._current_frame)
+        self._update_time()
+
+    def _show_frame(self, idx: int) -> None:
+        if not self._cap:
+            return
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = self._cap.read()
+        if ret:
+            self._render_frame(frame)
+            self._current_frame = idx
+
+    def _render_frame(self, frame) -> None:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        img = QImage(rgb.data, w, h, w * ch, QImage.Format.Format_RGB888)
+        pixmap = QPixmap.fromImage(img)
+        scaled = pixmap.scaled(
+            self._display.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._display.setPixmap(scaled)
+
+    def _on_slider_press(self) -> None:
+        self._slider_dragging = True
+
+    def _on_slider_release(self) -> None:
+        self._slider_dragging = False
+        self._show_frame(self._slider.value())
+        self._update_time()
+
+    def _update_time(self) -> None:
+        def fmt(frames):
+            secs = int(frames / self._fps) if self._fps > 0 else 0
+            return f"{secs // 60}:{secs % 60:02d}"
+        self._time_label.setText(f"{fmt(self._current_frame)} / {fmt(self._frame_count)}")
+
+    def cleanup(self) -> None:
+        self.stop()
+        if self._cap:
+            self._cap.release()
+            self._cap = None
 
 
 class DropPanel(QFrame):
@@ -287,6 +426,7 @@ class ContourControlWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
 
         self._build_ui()
+        self._build_menubar()
         self._refresh_status()
 
     def _build_ui(self) -> None:
@@ -305,6 +445,76 @@ class ContourControlWindow(QMainWindow):
         content.addWidget(self._build_left_panel(), 0)
         content.addWidget(self._build_right_panel(), 1)
         main.addLayout(content, 1)
+
+    def _build_menubar(self) -> None:
+        mb = self.menuBar()
+        mb.setStyleSheet("""
+            QMenuBar { background: #FFFFFF; color: #374151; border-bottom: 1px solid #E5E7EB; padding: 2px 8px; }
+            QMenuBar::item { padding: 6px 12px; border-radius: 4px; }
+            QMenuBar::item:selected { background: #F3F4F6; }
+            QMenu { background: #FFFFFF; color: #374151; border: 1px solid #E5E7EB; border-radius: 6px; padding: 4px; }
+            QMenu::item { padding: 6px 24px; border-radius: 4px; }
+            QMenu::item:selected { background: #F3F4F6; }
+        """)
+
+        file_menu = mb.addMenu("文件")
+        open_act = QAction("打开视频", self)
+        open_act.triggered.connect(self._choose_input)
+        file_menu.addAction(open_act)
+        file_menu.addSeparator()
+        quit_act = QAction("退出", self)
+        quit_act.triggered.connect(self.close)
+        file_menu.addAction(quit_act)
+
+        settings_menu = mb.addMenu("设置")
+        model_dir_act = QAction("模型目录...", self)
+        model_dir_act.triggered.connect(self._change_model_dir)
+        settings_menu.addAction(model_dir_act)
+        output_dir_act = QAction("输出目录...", self)
+        output_dir_act.triggered.connect(self._change_output_dir)
+        settings_menu.addAction(output_dir_act)
+
+        help_menu = mb.addMenu("帮助")
+        about_act = QAction("关于", self)
+        about_act.triggered.connect(lambda: QMessageBox.about(self, "关于", f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool"))
+        help_menu.addAction(about_act)
+        github_act = QAction("GitHub 主页", self)
+        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
+        help_menu.addAction(github_act)
+
+    def _change_model_dir(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "选择模型目录", str(MODELS_DIR))
+        if d:
+            os.environ["DEPTH_MODELS_DIR"] = d
+            import depth_converter.models as _m
+            _m.MODELS_DIR = Path(d)
+            self._refresh_models()
+
+    def _change_output_dir(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "选择默认输出目录", str(Path.home() / "Desktop"))
+        if d:
+            self.output_dir = d
+            self.output_dir_label.setText(f"输出到：{_short_path(d, 28)}")
+
+    def _open_model_dir(self) -> None:
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(str(MODELS_DIR))
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(MODELS_DIR)))
+        self._refresh_models()
+
+    def _refresh_models(self) -> None:
+        current = self.model_combo.currentText()
+        self.model_combo.clear()
+        items = list(MODEL_DEFS.keys())
+        for f in sorted(MODELS_DIR.glob("*.onnx")):
+            name = f.stem
+            if not any(name in str(cfg["path"]) for cfg in MODEL_DEFS.values()):
+                items.append(f"{name} (自定义)")
+        self.model_combo.addItems(items)
+        if current in items:
+            self.model_combo.setCurrentText(current)
 
     def _build_header(self) -> QHBoxLayout:
         header = QHBoxLayout()
@@ -374,6 +584,12 @@ class ContourControlWindow(QMainWindow):
         self.model_combo.addItems(list(MODEL_DEFS.keys()))
         self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
 
+        self.model_folder_btn = QPushButton("📂")
+        self.model_folder_btn.setObjectName("secondaryButton")
+        self.model_folder_btn.setFixedSize(36, 36)
+        self.model_folder_btn.setToolTip("打开模型目录")
+        self.model_folder_btn.clicked.connect(self._open_model_dir)
+
         self.resolution_combo = QComboBox()
         self.resolution_combo.addItems(list(RESOLUTION_PRESETS.keys()))
         self.resolution_combo.setCurrentText("Original")
@@ -385,7 +601,8 @@ class ContourControlWindow(QMainWindow):
         self.smoothing_slider.valueChanged.connect(lambda value: self.smoothing_value.setText(str(value)))
 
         form.addWidget(self._field_label("模型"), 0, 0)
-        form.addWidget(self.model_combo, 0, 1, 1, 2)
+        form.addWidget(self.model_combo, 0, 1)
+        form.addWidget(self.model_folder_btn, 0, 2)
         form.addWidget(self._field_label("分辨率"), 1, 0)
         form.addWidget(self.resolution_combo, 1, 1, 1, 2)
         form.addWidget(self._field_label("平滑"), 2, 0)
@@ -424,8 +641,29 @@ class ContourControlWindow(QMainWindow):
         panel.setObjectName("panel")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
+        # Video player with source/output tabs
+        player_header = QHBoxLayout()
+        player_header.setSpacing(8)
+        self._src_tab = QPushButton("源视频")
+        self._src_tab.setObjectName("secondaryButton")
+        self._src_tab.setCheckable(True)
+        self._src_tab.setChecked(True)
+        self._src_tab.clicked.connect(lambda: self._switch_player("src"))
+        self._out_tab = QPushButton("深度视频")
+        self._out_tab.setObjectName("secondaryButton")
+        self._out_tab.setCheckable(True)
+        self._out_tab.clicked.connect(lambda: self._switch_player("out"))
+        player_header.addWidget(self._src_tab)
+        player_header.addWidget(self._out_tab)
+        player_header.addStretch(1)
+        layout.addLayout(player_header)
+
+        self._video_player = VideoPlayer()
+        layout.addWidget(self._video_player, 2)
+
+        # Task status section
         top = QHBoxLayout()
         title = QLabel("任务状态")
         title.setObjectName("sectionTitle")
@@ -475,6 +713,14 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(result)
         return panel
 
+    def _switch_player(self, which: str) -> None:
+        self._src_tab.setChecked(which == "src")
+        self._out_tab.setChecked(which == "out")
+        if which == "src" and self.input_path:
+            self._video_player.load(self.input_path)
+        elif which == "out" and self.output_path:
+            self._video_player.load(self.output_path)
+
     @staticmethod
     def _field_label(text: str) -> QLabel:
         label = QLabel(text)
@@ -510,6 +756,8 @@ class ContourControlWindow(QMainWindow):
         self.progress_label.setText(_short_path(path))
         self.state_label.setText("已选择视频")
         self._append_log(f"输入：{path}")
+        self._video_player.load(path)
+        self._switch_player("src")
 
     def _choose_output_dir(self) -> None:
         start_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
@@ -574,6 +822,8 @@ class ContourControlWindow(QMainWindow):
         self.open_folder_btn.setEnabled(True)
         self._set_controls_enabled(True)
         self._append_log(f"完成：{output_path}")
+        self._video_player.load(output_path)
+        self._switch_player("out")
         QMessageBox.information(self, APP_TITLE, "转换完成。")
 
     def _on_failed(self, message: str) -> None:
@@ -660,8 +910,8 @@ def apply_style(app: QApplication) -> None:
             border-radius: 10px;
         }
         QFrame#dropPanel[dragging="true"] {
-            background: #ECFDF5;
-            border: 2px solid #6EE7B7;
+            background: #F3F4F6;
+            border: 2px solid #9CA3AF;
         }
         QLabel#dropTitle {
             color: #111827;
@@ -683,8 +933,8 @@ def apply_style(app: QApplication) -> None:
             font-weight: 500;
         }
         QLabel#badge[kind="cuda"], QLabel#badge[kind="ok"] {
-            background: #ECFDF5;
-            color: #059669;
+            background: #F3F4F6;
+            color: #111827;
         }
         QLabel#badge[kind="cpu"] {
             background: #F3F4F6;
@@ -731,8 +981,8 @@ def apply_style(app: QApplication) -> None:
             border-color: #6B7280;
         }
         QCheckBox::indicator:checked {
-            background: #059669;
-            border-color: #059669;
+            background: #111827;
+            border-color: #111827;
         }
         QSlider::groove:horizontal {
             height: 4px;
@@ -744,10 +994,10 @@ def apply_style(app: QApplication) -> None:
             height: 16px;
             margin: -6px 0;
             border-radius: 8px;
-            background: #059669;
+            background: #111827;
         }
         QSlider::handle:horizontal:hover {
-            background: #10B981;
+            background: #374151;
         }
         QPushButton {
             border: none;
@@ -756,15 +1006,15 @@ def apply_style(app: QApplication) -> None:
             font-weight: 600;
         }
         QPushButton#primaryButton {
-            background: #059669;
+            background: #111827;
             color: #FFFFFF;
             font-size: 14px;
         }
         QPushButton#primaryButton:hover {
-            background: #047857;
+            background: #374151;
         }
         QPushButton#primaryButton:pressed {
-            background: #065F46;
+            background: #000000;
         }
         QPushButton#secondaryButton {
             background: #F3F4F6;
@@ -788,7 +1038,7 @@ def apply_style(app: QApplication) -> None:
         }
         QProgressBar::chunk {
             border-radius: 3px;
-            background: #10B981;
+            background: #111827;
         }
         QPlainTextEdit#logBox {
             background: #FFFFFF;

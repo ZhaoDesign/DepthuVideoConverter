@@ -26,9 +26,9 @@ WizardImageFile=..\..\assets\installer-banner.bmp
 WizardSmallImageFile=..\..\assets\installer-small.bmp
 UninstallDisplayIcon={app}\assets\depth-video-converter.ico
 OutputDir=..\..\dist\windows-installer
-OutputBaseFilename=ContourControlTool-Windows-x64-Setup
-Compression=lzma2/ultra64
-SolidCompression=yes
+OutputBaseFilename=ContourControlTool-Windows-x64-OfflineSetup
+Compression=lzma2/fast
+SolidCompression=no
 WizardStyle=modern
 SetupLogging=yes
 UsePreviousAppDir=yes
@@ -85,6 +85,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 [Files]
 ; Pre-built Python runtime (bundled offline)
 Source: "..\..\build\runtime\*"; DestDir: "{localappdata}\CCT\rt311cpu"; Flags: ignoreversion recursesubdirs createallsubdirs; BeforeInstall: StopExistingApp
+; Bundled ONNX model (Small) — no download needed on first run
+Source: "..\..\build\models\depth_anything_v2_vits.onnx"; DestDir: "{localappdata}\DepthVideoConverter\models"; Flags: ignoreversion
 ; Application source
 Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion

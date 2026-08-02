@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.request import urlretrieve
+import urllib.request
+import socket
 
 import cv2
 import numpy as np
@@ -26,6 +28,7 @@ def _model_urls(repo: str, filename: str) -> list[str]:
     return [
         f"{_HF_MIRROR}/{hf_path}",
         f"https://huggingface.co/{hf_path}",
+        f"https://mirror.ghproxy.com/https://huggingface.co/{hf_path}",
     ]
 
 MODEL_DEFS: Dict[str, dict] = {
@@ -125,20 +128,7 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
     if progress is not None:
         progress(0.0, f"正在下载模型：{desc}。首次使用可能需要几分钟。")
 
-    def _make_hook(url_label: str):
-        _last_pct = [-1]
-        def _report(count: int, block_size: int, total_size: int) -> None:
-            if progress is None or total_size <= 0:
-                return
-            downloaded = count * block_size
-            pct = int(min(downloaded / total_size, 1.0) * 100)
-            if pct == _last_pct[0]:
-                return
-            _last_pct[0] = pct
-            mb_done = downloaded / (1024 * 1024)
-            mb_total = total_size / (1024 * 1024)
-            progress(pct / 100 * 0.50, f"正在下载模型 ({mb_done:.1f}/{mb_total:.1f} MB)：{url_label}")
-        return _report
+    timeout = int(os.environ.get("DOWNLOAD_TIMEOUT", "60"))
 
     last_error: Exception | None = None
     for i, url in enumerate(urls):
@@ -146,7 +136,26 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
         if progress is not None and i > 0:
             progress(0.0, f"切换到{source}源重试下载：{desc}")
         try:
-            urlretrieve(url, str(dest), reporthook=_make_hook(f"{desc} [{source}]"))
+            req = urllib.request.Request(url, headers={"User-Agent": "DepthVideoConverter/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                total_size = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                last_pct = -1
+                with open(dest, "wb") as f:
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress is not None and total_size > 0:
+                            pct = int(min(downloaded / total_size, 1.0) * 100)
+                            if pct != last_pct:
+                                last_pct = pct
+                                mb_done = downloaded / (1024 * 1024)
+                                mb_total = total_size / (1024 * 1024)
+                                progress(pct / 100 * 0.50, f"正在下载模型 ({mb_done:.1f}/{mb_total:.1f} MB)：{desc} [{source}]")
+
             if not _is_valid_model(dest):
                 if dest.exists():
                     dest.unlink(missing_ok=True)
@@ -159,7 +168,7 @@ def download_with_progress(urls: list[str], dest: Path, desc: str, progress) -> 
             if dest.exists():
                 dest.unlink(missing_ok=True)
 
-    raise last_error or RuntimeError(f"所有下载地址均失败：{desc}")
+    raise last_error or RuntimeError(f"所有下载地址均失败：{desc}\n\n如果网络无法访问 HuggingFace，可以设置环境变量 HF_MIRROR 指向可用镜像，或手动下载模型到:\n{dest}")
 
 
 def ensure_checkpoint(model_size_label: str, progress=None) -> Path:
