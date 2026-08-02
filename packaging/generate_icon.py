@@ -33,9 +33,28 @@ def _make_master() -> Image.Image:
 
     draw.polygon([(438, 364), (438, 660), (688, 512)], fill="#ffffff")
     draw.rounded_rectangle((180, 790, 844, 836), radius=23, fill="#353c44")
-    draw.rounded_rectangle((180, 790, 618, 836), radius=23, fill="#ff7a1a")
+    draw.rounded_rectangle((180, 790, 618, 836), radius=23, fill="#10B981")
     draw.ellipse((600, 770, 662, 856), fill="#ffffff")
     return image
+
+
+def _make_installer_banner(master: Image.Image) -> None:
+    banner = Image.new("RGB", (164, 314), "#FFFFFF")
+    draw = ImageDraw.Draw(banner)
+    draw.rectangle((0, 210, 164, 314), fill="#F3F4F6")
+    icon = master.resize((80, 80), Image.Resampling.LANCZOS)
+    icon_rgb = Image.new("RGB", icon.size, "#FFFFFF")
+    icon_rgb.paste(icon, mask=icon.split()[3])
+    banner.paste(icon_rgb, (42, 80))
+    draw.rectangle((32, 172, 132, 174), fill="#10B981")
+    banner.save(ASSETS / "installer-banner.bmp")
+
+
+def _make_installer_small(master: Image.Image) -> None:
+    small = master.resize((55, 55), Image.Resampling.LANCZOS)
+    small_rgb = Image.new("RGB", small.size, "#FFFFFF")
+    small_rgb.paste(small, mask=small.split()[3])
+    small_rgb.save(ASSETS / "installer-small.bmp")
 
 
 def main() -> None:
@@ -47,18 +66,22 @@ def main() -> None:
     master.save(png_path)
     master.save(ico_path, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
-    iconset = ASSETS / "DepthVideoConverter.iconset"
-    if iconset.exists():
+    _make_installer_banner(master)
+    _make_installer_small(master)
+
+    if shutil.which("iconutil"):
+        iconset = ASSETS / "DepthVideoConverter.iconset"
+        if iconset.exists():
+            shutil.rmtree(iconset)
+        iconset.mkdir()
+        for points in (16, 32, 128, 256, 512):
+            master.resize((points, points), Image.Resampling.LANCZOS).save(iconset / f"icon_{points}x{points}.png")
+            pixels = points * 2
+            master.resize((pixels, pixels), Image.Resampling.LANCZOS).save(
+                iconset / f"icon_{points}x{points}@2x.png"
+            )
+        subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns_path)], check=True)
         shutil.rmtree(iconset)
-    iconset.mkdir()
-    for points in (16, 32, 128, 256, 512):
-        master.resize((points, points), Image.Resampling.LANCZOS).save(iconset / f"icon_{points}x{points}.png")
-        pixels = points * 2
-        master.resize((pixels, pixels), Image.Resampling.LANCZOS).save(
-            iconset / f"icon_{points}x{points}@2x.png"
-        )
-    subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns_path)], check=True)
-    shutil.rmtree(iconset)
 
 
 if __name__ == "__main__":
