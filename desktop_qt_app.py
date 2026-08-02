@@ -503,9 +503,10 @@ class ContourControlWindow(QMainWindow):
             QMenuBar { background: #FFFFFF; color: #374151; border-bottom: 1px solid #E5E7EB; padding: 2px 8px; }
             QMenuBar::item { padding: 6px 12px; border-radius: 4px; }
             QMenuBar::item:selected { background: #F3F4F6; }
-            QMenu { background: #FFFFFF; color: #374151; border: 1px solid #E5E7EB; border-radius: 6px; padding: 4px; }
-            QMenu::item { padding: 6px 24px; border-radius: 4px; }
+            QMenu { background: #FFFFFF; color: #374151; border: 1px solid #E5E7EB; padding: 4px; margin: 0; }
+            QMenu::item { padding: 8px 24px; border-radius: 4px; }
             QMenu::item:selected { background: #F3F4F6; }
+            QMenu::separator { height: 1px; background: #E5E7EB; margin: 4px 12px; }
         """)
 
         file_menu = mb.addMenu("文件")
@@ -524,6 +525,19 @@ class ContourControlWindow(QMainWindow):
         output_dir_act = QAction("输出目录...", self)
         output_dir_act.triggered.connect(self._change_output_dir)
         settings_menu.addAction(output_dir_act)
+        settings_menu.addSeparator()
+        uninstall_act = QAction("卸载应用", self)
+        uninstall_act.triggered.connect(self._uninstall_app)
+        settings_menu.addAction(uninstall_act)
+
+        model_menu = mb.addMenu("模型下载")
+        for name, cfg in MODEL_DEFS.items():
+            sub = model_menu.addMenu(name.split(" (")[0])
+            for url in cfg["urls"]:
+                label = "镜像" if "hf-mirror" in url else ("代理" if "ghproxy" in url else "官方")
+                act = QAction(f"{label}: {url[:50]}...", self)
+                act.triggered.connect(lambda checked, u=url: QDesktopServices.openUrl(QUrl(u)))
+                sub.addAction(act)
 
         help_menu = mb.addMenu("帮助")
         about_act = QAction("关于", self)
@@ -532,6 +546,15 @@ class ContourControlWindow(QMainWindow):
         github_act = QAction("GitHub 主页", self)
         github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
         help_menu.addAction(github_act)
+
+    def _uninstall_app(self) -> None:
+        import subprocess
+        uninstall_exe = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Contour Control Tool" / "unins000.exe"
+        if uninstall_exe.is_file():
+            subprocess.Popen([str(uninstall_exe)])
+            self.close()
+        else:
+            _show_dialog(self, "卸载", f"未找到卸载程序。\n请手动删除安装目录。")
 
     def _change_model_dir(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "选择模型目录", str(MODELS_DIR))
@@ -571,32 +594,11 @@ class ContourControlWindow(QMainWindow):
         header = QHBoxLayout()
         header.setSpacing(16)
 
-        icon = QLabel()
-        icon.setObjectName("appIcon")
-        icon.setFixedSize(44, 44)
-        image_path = _asset_path("depth-video-converter.png")
-        if image_path.is_file():
-            icon.setPixmap(QIcon(str(image_path)).pixmap(38, 38))
-        else:
-            icon.setText("D")
-            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        title_box = QVBoxLayout()
-        title_box.setSpacing(2)
-        title = QLabel(APP_TITLE)
-        title.setObjectName("appTitle")
-        subtitle = QLabel("本地运行的独立桌面应用")
-        subtitle.setObjectName("muted")
-        title_box.addWidget(title)
-        title_box.addWidget(subtitle)
-
         self.device_badge = QLabel("检测设备中")
         self.device_badge.setObjectName("badge")
         self.ffmpeg_badge = QLabel("FFmpeg")
         self.ffmpeg_badge.setObjectName("badge")
 
-        header.addWidget(icon)
-        header.addLayout(title_box)
         header.addStretch(1)
         header.addWidget(self.device_badge)
         header.addWidget(self.ffmpeg_badge)
@@ -605,10 +607,10 @@ class ContourControlWindow(QMainWindow):
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
-        panel.setFixedWidth(400)
+        panel.setFixedWidth(420)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
         section = QLabel("输入视频")
         section.setObjectName("sectionTitle")
@@ -617,6 +619,10 @@ class ContourControlWindow(QMainWindow):
         self.drop_panel = DropPanel()
         self.drop_panel.file_dropped.connect(self._set_input_path)
         layout.addWidget(self.drop_panel)
+
+        self._src_player = VideoPlayer()
+        self._src_player.setVisible(False)
+        layout.addWidget(self._src_player, 1)
 
         browse_btn = QPushButton("选择视频")
         browse_btn.setObjectName("secondaryButton")
@@ -634,6 +640,7 @@ class ContourControlWindow(QMainWindow):
         self.model_combo = QComboBox()
         self.model_combo.addItems(list(MODEL_DEFS.keys()))
         self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
+        self.model_combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
 
         self.model_folder_btn = QPushButton("📂")
         self.model_folder_btn.setObjectName("secondaryButton")
@@ -644,6 +651,7 @@ class ContourControlWindow(QMainWindow):
         self.resolution_combo = QComboBox()
         self.resolution_combo.addItems(list(RESOLUTION_PRESETS.keys()))
         self.resolution_combo.setCurrentText("Original")
+        self.resolution_combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
 
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
@@ -677,8 +685,6 @@ class ContourControlWindow(QMainWindow):
         output_row.addWidget(output_btn)
         layout.addLayout(output_row)
 
-        layout.addItem(QSpacerItem(0, 6, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
-
         self.start_btn = QPushButton("开始转换")
         self.start_btn.setObjectName("primaryButton")
         self.start_btn.setMinimumHeight(44)
@@ -694,33 +700,20 @@ class ContourControlWindow(QMainWindow):
         layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(12)
 
-        # Video player with source/output tabs
-        player_header = QHBoxLayout()
-        player_header.setSpacing(8)
-        self._src_tab = QPushButton("源视频")
-        self._src_tab.setObjectName("secondaryButton")
-        self._src_tab.setCheckable(True)
-        self._src_tab.setChecked(True)
-        self._src_tab.clicked.connect(lambda: self._switch_player("src"))
-        self._out_tab = QPushButton("深度视频")
-        self._out_tab.setObjectName("secondaryButton")
-        self._out_tab.setCheckable(True)
-        self._out_tab.clicked.connect(lambda: self._switch_player("out"))
-        player_header.addWidget(self._src_tab)
-        player_header.addWidget(self._out_tab)
-        player_header.addStretch(1)
-        layout.addLayout(player_header)
+        title = QLabel("深度视频")
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
 
         self._video_player = VideoPlayer()
         layout.addWidget(self._video_player, 2)
 
         # Task status section
         top = QHBoxLayout()
-        title = QLabel("任务状态")
-        title.setObjectName("sectionTitle")
+        status_title = QLabel("任务状态")
+        status_title.setObjectName("sectionTitle")
         self.state_label = QLabel("等待视频")
         self.state_label.setObjectName("statePill")
-        top.addWidget(title)
+        top.addWidget(status_title)
         top.addStretch(1)
         top.addWidget(self.state_label)
         layout.addLayout(top)
@@ -764,14 +757,6 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(result)
         return panel
 
-    def _switch_player(self, which: str) -> None:
-        self._src_tab.setChecked(which == "src")
-        self._out_tab.setChecked(which == "out")
-        if which == "src" and self.input_path:
-            self._video_player.load(self.input_path)
-        elif which == "out" and self.output_path:
-            self._video_player.load(self.output_path)
-
     @staticmethod
     def _field_label(text: str) -> QLabel:
         label = QLabel(text)
@@ -801,14 +786,15 @@ class ContourControlWindow(QMainWindow):
     def _set_input_path(self, path: str) -> None:
         self.input_path = path
         self.drop_panel.set_file(path)
+        self.drop_panel.setVisible(False)
+        self._src_player.setVisible(True)
+        self._src_player.load(path)
         if not hasattr(self, "output_dir"):
             self.output_dir = str(_default_output_dir(path))
             self.output_dir_label.setText(f"输出到：{_short_path(self.output_dir, 28)}")
         self.progress_label.setText(_short_path(path))
         self.state_label.setText("已选择视频")
         self._append_log(f"输入：{path}")
-        self._video_player.load(path)
-        self._switch_player("src")
 
     def _choose_output_dir(self) -> None:
         start_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
@@ -874,7 +860,6 @@ class ContourControlWindow(QMainWindow):
         self._set_controls_enabled(True)
         self._append_log(f"完成：{output_path}")
         self._video_player.load(output_path)
-        self._switch_player("out")
         _show_dialog(self, APP_TITLE, "转换完成。")
 
     def _on_failed(self, message: str) -> None:
