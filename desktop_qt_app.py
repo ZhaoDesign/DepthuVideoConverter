@@ -965,6 +965,15 @@ def apply_style(app: QApplication) -> None:
             selection-background-color: #F3F4F6;
             selection-color: #111827;
             outline: none;
+            padding: 4px;
+        }
+        QComboBox QAbstractItemView::item {
+            padding: 8px 12px;
+            border-radius: 4px;
+            min-height: 24px;
+        }
+        QComboBox QAbstractItemView::item:selected {
+            background: #F3F4F6;
         }
         QCheckBox {
             spacing: 10px;
