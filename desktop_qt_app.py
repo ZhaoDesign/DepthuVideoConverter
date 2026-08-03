@@ -131,6 +131,13 @@ def _asset_path(name: str) -> Path:
     return candidates[0]
 
 
+def _load_icon(name: str) -> QIcon:
+    p = _asset_path(name)
+    if p.is_file():
+        return QIcon(str(p))
+    return QIcon()
+
+
 def _default_output_dir(input_path: str | None) -> Path:
     if input_path:
         parent = Path(input_path).expanduser().resolve().parent
@@ -231,9 +238,11 @@ class VideoPlayer(QFrame):
 
         controls = QHBoxLayout()
         controls.setSpacing(8)
-        self._play_btn = QPushButton("▶")
+        self._play_btn = QPushButton()
         self._play_btn.setObjectName("secondaryButton")
         self._play_btn.setFixedSize(36, 36)
+        self._play_btn.setIcon(_load_icon("icon-play.png"))
+        self._play_btn.setIconSize(QSize(20, 20))
         self._play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self._play_btn)
 
@@ -272,7 +281,7 @@ class VideoPlayer(QFrame):
     def stop(self) -> None:
         self._playing = False
         self._timer.stop()
-        self._play_btn.setText("▶")
+        self._play_btn.setIcon(_load_icon("icon-play.png"))
 
     def _toggle_play(self) -> None:
         if not self._cap:
@@ -281,7 +290,7 @@ class VideoPlayer(QFrame):
             self.stop()
         else:
             self._playing = True
-            self._play_btn.setText("⏸")
+            self._play_btn.setIcon(_load_icon("icon-pause.png"))
             self._timer.start(int(1000 / self._fps))
 
     def _next_frame(self) -> None:
@@ -642,9 +651,11 @@ class ContourControlWindow(QMainWindow):
         self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
         self.model_combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
 
-        self.model_folder_btn = QPushButton("📂")
+        self.model_folder_btn = QPushButton()
         self.model_folder_btn.setObjectName("secondaryButton")
         self.model_folder_btn.setFixedSize(36, 36)
+        self.model_folder_btn.setIcon(_load_icon("icon-folder.png"))
+        self.model_folder_btn.setIconSize(QSize(20, 20))
         self.model_folder_btn.setToolTip("打开模型目录")
         self.model_folder_btn.clicked.connect(self._open_model_dir)
 

@@ -38,8 +38,9 @@ cp "$ROOT/packaging/macos-web-installer/verify_runtime.py" "$INSTALLER_DIR/verif
 cp -R "$ROOT/depth_converter" "$APP_SRC_DIR/depth_converter"
 cp -R "$ROOT/depth_anything_v2" "$APP_SRC_DIR/depth_anything_v2"
 mkdir -p "$APP_SRC_DIR/assets"
-cp "$ROOT/assets/depth-video-converter.ico" "$APP_SRC_DIR/assets/depth-video-converter.ico"
-cp "$ROOT/assets/depth-video-converter.png" "$APP_SRC_DIR/assets/depth-video-converter.png"
+cp "$ROOT/assets/"*.png "$APP_SRC_DIR/assets/" 2>/dev/null || true
+cp "$ROOT/assets/"*.ico "$APP_SRC_DIR/assets/" 2>/dev/null || true
+cp "$ROOT/assets/"*.icns "$APP_SRC_DIR/assets/" 2>/dev/null || true
 
 SIGNATURE_FILE="$INSTALLER_DIR/runtime.signature"
 REQ_HASH="$(shasum -a 256 "$INSTALLER_DIR/runtime-requirements-macos.txt" | awk '{print $1}')"

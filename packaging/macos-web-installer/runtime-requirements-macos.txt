@@ -1,6 +1,6 @@
 PySide6-Essentials==6.7.3
 shiboken6==6.7.3
 onnxruntime==1.18.1
-opencv-python-headless==5.0.0.93
-numpy==2.4.6
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
 imageio-ffmpeg==0.6.0

@@ -120,8 +120,9 @@ cp "$ROOT/README_CN.md"               "$APP_SRC_DIR/"
 cp -R "$ROOT/depth_converter"         "$APP_SRC_DIR/depth_converter"
 cp -R "$ROOT/depth_anything_v2"       "$APP_SRC_DIR/depth_anything_v2"
 mkdir -p "$APP_SRC_DIR/assets"
-cp "$ROOT/assets/depth-video-converter.ico" "$APP_SRC_DIR/assets/"
-cp "$ROOT/assets/depth-video-converter.png" "$APP_SRC_DIR/assets/"
+cp "$ROOT/assets/"*.png "$APP_SRC_DIR/assets/" 2>/dev/null || true
+cp "$ROOT/assets/"*.ico "$APP_SRC_DIR/assets/" 2>/dev/null || true
+cp "$ROOT/assets/"*.icns "$APP_SRC_DIR/assets/" 2>/dev/null || true
 
 # ── 5. 创建启动脚本 ──────────────────────────────────────────────────
 cat > "$MACOS_DIR/$APP_NAME" <<'LAUNCHER_EOF'
