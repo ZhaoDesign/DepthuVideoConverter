@@ -59,6 +59,8 @@ mkdir -p "$BUILD_DIR/work" "$BUILD_DIR/dist" "$BUILD_DIR/spec"
   --hidden-import PySide6.QtCore \
   --hidden-import PySide6.QtGui \
   --hidden-import PySide6.QtWidgets \
+  --hidden-import PySide6.QtMultimedia \
+  --hidden-import PySide6.QtMultimediaWidgets \
   --hidden-import onnxruntime \
   --hidden-import cv2 \
   --hidden-import numpy \

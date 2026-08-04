@@ -65,8 +65,10 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 DATA_DIR = _configure_runtime()
 
 try:
-    from PySide6.QtCore import QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QAction, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QImage, QPixmap  # noqa: E402
+    from PySide6.QtCore import QPoint, QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
+    from PySide6.QtGui import QAction, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter  # noqa: E402
+    from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
+    from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
         QApplication,
         QCheckBox,
@@ -74,9 +76,11 @@ try:
         QDialog,
         QFileDialog,
         QFrame,
+        QGraphicsDropShadowEffect,
         QGridLayout,
         QHBoxLayout,
         QLabel,
+        QListView,
         QMainWindow,
         QMenuBar,
         QMessageBox,
@@ -86,6 +90,10 @@ try:
         QSizePolicy,
         QSlider,
         QSpacerItem,
+        QStackedLayout,
+        QStyle,
+        QStyledItemDelegate,
+        QStyleOptionViewItem,
         QVBoxLayout,
         QWidget,
     )
@@ -98,8 +106,6 @@ try:
         ffmpeg_available,
         process_video,
     )
-
-    import cv2  # noqa: E402
 except ImportError:
     import ctypes
 
@@ -136,6 +142,11 @@ def _load_icon(name: str) -> QIcon:
     if p.is_file():
         return QIcon(str(p))
     return QIcon()
+
+
+def _set_icon(button: QPushButton, name: str, size: int = 20) -> None:
+    button.setIcon(_load_icon(name))
+    button.setIconSize(QSize(size, size))
 
 
 def _default_output_dir(input_path: str | None) -> Path:
@@ -213,36 +224,148 @@ def _show_dialog(parent, title: str, message: str, kind: str = "info") -> None:
     dlg.exec()
 
 
+class FloatingToolTip(QFrame):
+    """Small rounded tooltip with a controlled shadow."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setObjectName("floatingTip")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(17, 24, 39, 48))
+        self.setGraphicsEffect(shadow)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        label = QLabel(text)
+        label.setObjectName("floatingTipText")
+        label.setWordWrap(False)
+        layout.addWidget(label)
+
+
+class IconButton(QPushButton):
+    """Icon-only button with consistent size and custom tooltip styling."""
+
+    def __init__(self, icon_name: str, tooltip_text: str, parent=None, size: int = 36) -> None:
+        super().__init__(parent)
+        self._tip = FloatingToolTip(tooltip_text)
+        self.setObjectName("iconButton")
+        self.setFixedSize(size, size)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        _set_icon(self, icon_name)
+
+    def set_icon_name(self, icon_name: str) -> None:
+        _set_icon(self, icon_name)
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        self._tip.adjustSize()
+        pos = self.mapToGlobal(QPoint((self.width() - self._tip.width()) // 2, self.height() + 8))
+        screen = QApplication.screenAt(pos) or QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            if pos.x() + self._tip.width() > available.right():
+                pos.setX(available.right() - self._tip.width() - 8)
+            if pos.x() < available.left():
+                pos.setX(available.left() + 8)
+        self._tip.move(pos)
+        self._tip.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        self._tip.hide()
+        super().leaveEvent(event)
+
+
+class ComboItemDelegate(QStyledItemDelegate):
+    """Paint combo popup items with rounded hover and selected states."""
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # type: ignore[override]
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(opt.state & QStyle.StateFlag.State_MouseOver)
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        bg_rect = opt.rect.adjusted(6, 3, -6, -3)
+        if selected:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#111827"))
+            painter.drawRoundedRect(bg_rect, 7, 7)
+        elif hovered:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#F3F4F6"))
+            painter.drawRoundedRect(bg_rect, 7, 7)
+
+        text_rect = opt.rect.adjusted(16, 0, -16, 0)
+        painter.setPen(QColor("#FFFFFF" if selected else "#374151"))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, opt.text)
+        painter.restore()
+
+    def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:  # type: ignore[override]
+        return QSize(super().sizeHint(option, index).width(), 36)
+
+
+def _configure_combo(combo: QComboBox) -> None:
+    view = QListView()
+    view.setObjectName("comboPopup")
+    view.setMouseTracking(True)
+    view.setUniformItemSizes(False)
+    view.setSpacing(2)
+    combo.setView(view)
+    combo.setItemDelegate(ComboItemDelegate(combo))
+    combo.setMaxVisibleItems(8)
+    combo.setMinimumHeight(38)
+    combo.setCursor(Qt.CursorShape.PointingHandCursor)
+    combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+
+
 class VideoPlayer(QFrame):
-    """Lightweight video player using OpenCV + QLabel + QTimer."""
+    """Native media player with audio, mute, volume, and seek controls."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("videoPlayer")
-        self._cap: cv2.VideoCapture | None = None
-        self._playing = False
-        self._fps = 30.0
-        self._frame_count = 0
-        self._current_frame = 0
+        self._duration = 0
+        self._slider_dragging = False
+
+        self._player = QMediaPlayer(self)
+        self._audio = QAudioOutput(self)
+        self._audio.setVolume(0.8)
+        self._player.setAudioOutput(self._audio)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self._display = QLabel()
-        self._display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._display.setMinimumHeight(200)
-        self._display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._display.setStyleSheet("background: #000000; border-radius: 8px;")
-        layout.addWidget(self._display, 1)
+        self._video_box = QFrame()
+        self._video_box.setObjectName("videoSurface")
+        self._video_box.setMinimumHeight(200)
+        self._video_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._video_stack = QStackedLayout(self._video_box)
+        self._video_stack.setContentsMargins(0, 0, 0, 0)
+        self._video_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
+
+        self._placeholder = QLabel("尚未加载视频")
+        self._placeholder.setObjectName("videoPlaceholder")
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._video_stack.addWidget(self._placeholder)
+
+        self._video = QVideoWidget()
+        self._video.setObjectName("videoWidget")
+        self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+        self._video_stack.addWidget(self._video)
+        self._video_stack.setCurrentWidget(self._placeholder)
+
+        self._player.setVideoOutput(self._video)
+        layout.addWidget(self._video_box, 1)
 
         controls = QHBoxLayout()
-        controls.setSpacing(8)
-        self._play_btn = QPushButton()
-        self._play_btn.setObjectName("secondaryButton")
-        self._play_btn.setFixedSize(36, 36)
-        self._play_btn.setIcon(_load_icon("icon-play.png"))
-        self._play_btn.setIconSize(QSize(20, 20))
+        controls.setSpacing(10)
+        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self)
         self._play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self._play_btn)
 
@@ -256,98 +379,101 @@ class VideoPlayer(QFrame):
         self._time_label.setObjectName("muted")
         self._time_label.setFixedWidth(100)
         controls.addWidget(self._time_label)
+
+        self._mute_btn = IconButton("icon-volume.png", "开启 / 关闭声音", self, size=32)
+        self._mute_btn.clicked.connect(self._toggle_mute)
+        controls.addWidget(self._mute_btn)
+
+        self._volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._volume_slider.setObjectName("volumeSlider")
+        self._volume_slider.setRange(0, 100)
+        self._volume_slider.setValue(80)
+        self._volume_slider.setFixedWidth(86)
+        self._volume_slider.valueChanged.connect(self._on_volume_changed)
+        controls.addWidget(self._volume_slider)
+
         layout.addLayout(controls)
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._next_frame)
-        self._slider_dragging = False
+        self._player.positionChanged.connect(self._on_position_changed)
+        self._player.durationChanged.connect(self._on_duration_changed)
+        self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+        self._player.errorOccurred.connect(self._on_error)
 
     def load(self, path: str) -> None:
         self.stop()
-        if self._cap:
-            self._cap.release()
-        self._cap = cv2.VideoCapture(path)
-        if not self._cap.isOpened():
-            self._display.setText("无法打开视频")
-            return
-        self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
-        self._frame_count = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self._current_frame = 0
-        self._slider.setRange(0, max(self._frame_count - 1, 0))
+        self._duration = 0
+        self._player.setSource(QUrl.fromLocalFile(path))
+        self._video_stack.setCurrentWidget(self._video)
+        self._slider.setRange(0, 0)
         self._slider.setValue(0)
-        self._show_frame(0)
-        self._update_time()
+        self._time_label.setText("0:00 / 0:00")
 
     def stop(self) -> None:
-        self._playing = False
-        self._timer.stop()
-        self._play_btn.setIcon(_load_icon("icon-play.png"))
+        self._player.stop()
+        self._play_btn.set_icon_name("icon-play.png")
 
     def _toggle_play(self) -> None:
-        if not self._cap:
+        if self._player.source().isEmpty():
             return
-        if self._playing:
-            self.stop()
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
         else:
-            self._playing = True
-            self._play_btn.setIcon(_load_icon("icon-pause.png"))
-            self._timer.start(int(1000 / self._fps))
+            self._player.play()
 
-    def _next_frame(self) -> None:
-        if not self._cap or not self._playing:
-            return
-        ret, frame = self._cap.read()
-        if not ret:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._current_frame = 0
-            self.stop()
-            return
-        self._current_frame = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
-        self._render_frame(frame)
-        if not self._slider_dragging:
-            self._slider.setValue(self._current_frame)
-        self._update_time()
+    def _toggle_mute(self) -> None:
+        self._audio.setMuted(not self._audio.isMuted())
+        self._update_volume_icon()
 
-    def _show_frame(self, idx: int) -> None:
-        if not self._cap:
-            return
-        self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = self._cap.read()
-        if ret:
-            self._render_frame(frame)
-            self._current_frame = idx
-
-    def _render_frame(self, frame) -> None:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb.shape
-        img = QImage(rgb.data, w, h, w * ch, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(img)
-        scaled = pixmap.scaled(
-            self._display.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._display.setPixmap(scaled)
+    def _on_volume_changed(self, value: int) -> None:
+        self._audio.setVolume(value / 100)
+        if value > 0 and self._audio.isMuted():
+            self._audio.setMuted(False)
+        if value == 0 and not self._audio.isMuted():
+            self._audio.setMuted(True)
+        self._update_volume_icon()
 
     def _on_slider_press(self) -> None:
         self._slider_dragging = True
 
     def _on_slider_release(self) -> None:
         self._slider_dragging = False
-        self._show_frame(self._slider.value())
-        self._update_time()
+        self._player.setPosition(self._slider.value())
 
-    def _update_time(self) -> None:
-        def fmt(frames):
-            secs = int(frames / self._fps) if self._fps > 0 else 0
+    def _on_position_changed(self, position: int) -> None:
+        if not self._slider_dragging:
+            self._slider.setValue(position)
+        self._update_time(position, self._duration)
+
+    def _on_duration_changed(self, duration: int) -> None:
+        self._duration = max(0, duration)
+        self._slider.setRange(0, self._duration)
+        self._update_time(self._player.position(), self._duration)
+
+    def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+        icon = "icon-pause.png" if state == QMediaPlayer.PlaybackState.PlayingState else "icon-play.png"
+        self._play_btn.set_icon_name(icon)
+
+    def _on_error(self, error, error_string: str) -> None:
+        if error != QMediaPlayer.Error.NoError:
+            self._placeholder.setText("无法播放视频")
+            self._video_stack.setCurrentWidget(self._placeholder)
+            self._time_label.setText("无法播放")
+
+    def _update_volume_icon(self) -> None:
+        muted = self._audio.isMuted() or self._volume_slider.value() == 0
+        self._mute_btn.set_icon_name("icon-volume-muted.png" if muted else "icon-volume.png")
+
+    def _update_time(self, position: int, duration: int) -> None:
+        def fmt(ms: int) -> str:
+            secs = max(0, int(ms / 1000))
             return f"{secs // 60}:{secs % 60:02d}"
-        self._time_label.setText(f"{fmt(self._current_frame)} / {fmt(self._frame_count)}")
+        self._time_label.setText(f"{fmt(position)} / {fmt(duration)}")
 
     def cleanup(self) -> None:
         self.stop()
-        if self._cap:
-            self._cap.release()
-            self._cap = None
+        self._player.setSource(QUrl())
+        self._placeholder.setText("尚未加载视频")
+        self._video_stack.setCurrentWidget(self._placeholder)
 
 
 class DropPanel(QFrame):
@@ -649,20 +775,15 @@ class ContourControlWindow(QMainWindow):
         self.model_combo = QComboBox()
         self.model_combo.addItems(list(MODEL_DEFS.keys()))
         self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
-        self.model_combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+        _configure_combo(self.model_combo)
 
-        self.model_folder_btn = QPushButton()
-        self.model_folder_btn.setObjectName("secondaryButton")
-        self.model_folder_btn.setFixedSize(36, 36)
-        self.model_folder_btn.setIcon(_load_icon("icon-folder.png"))
-        self.model_folder_btn.setIconSize(QSize(20, 20))
-        self.model_folder_btn.setToolTip("打开模型目录")
+        self.model_folder_btn = IconButton("icon-folder.png", "打开模型目录", self)
         self.model_folder_btn.clicked.connect(self._open_model_dir)
 
         self.resolution_combo = QComboBox()
         self.resolution_combo.addItems(list(RESOLUTION_PRESETS.keys()))
         self.resolution_combo.setCurrentText("Original")
-        self.resolution_combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+        _configure_combo(self.resolution_combo)
 
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
@@ -916,6 +1037,7 @@ class ContourControlWindow(QMainWindow):
 def apply_style(app: QApplication) -> None:
     app.setFont(QFont("Microsoft YaHei UI", 10))
     check_icon = str(_asset_path("checkmark.png")).replace("\\", "/")
+    chevron_icon = str(_asset_path("icon-chevron-down.png")).replace("\\", "/")
     app.setStyleSheet(
         """
         QWidget#root {
@@ -961,6 +1083,22 @@ def apply_style(app: QApplication) -> None:
             background: #F3F4F6;
             border: 2px solid #9CA3AF;
         }
+        QFrame#videoPlayer {
+            background: transparent;
+        }
+        QFrame#videoSurface {
+            background: #000000;
+            border-radius: 8px;
+        }
+        QVideoWidget#videoWidget {
+            background: #000000;
+        }
+        QLabel#videoPlaceholder {
+            background: #000000;
+            color: #9CA3AF;
+            border-radius: 8px;
+            font-size: 13px;
+        }
         QLabel#dropTitle {
             color: #111827;
             font-size: 17px;
@@ -997,31 +1135,34 @@ def apply_style(app: QApplication) -> None:
             color: #374151;
             border: 1px solid #E5E7EB;
             border-radius: 8px;
-            padding: 8px 12px;
+            padding: 8px 34px 8px 12px;
+            min-height: 20px;
         }
         QComboBox:hover {
             border-color: #9CA3AF;
         }
+        QComboBox:focus {
+            border: 1px solid #111827;
+        }
         QComboBox::drop-down {
-            width: 24px;
+            width: 30px;
             border: none;
+        }
+        QComboBox::down-arrow {
+            image: url(""" + chevron_icon + """);
+            width: 16px;
+            height: 16px;
+            margin-right: 12px;
         }
         QComboBox QAbstractItemView {
             background: #FFFFFF;
             color: #374151;
             border: 1px solid #E5E7EB;
-            selection-background-color: #F3F4F6;
+            border-radius: 10px;
+            selection-background-color: transparent;
             selection-color: #111827;
             outline: none;
-            padding: 4px;
-        }
-        QComboBox QAbstractItemView::item {
-            padding: 8px 12px;
-            border-radius: 4px;
-            min-height: 24px;
-        }
-        QComboBox QAbstractItemView::item:selected {
-            background: #F3F4F6;
+            padding: 6px;
         }
         QCheckBox {
             spacing: 10px;
@@ -1057,6 +1198,18 @@ def apply_style(app: QApplication) -> None:
         QSlider::handle:horizontal:hover {
             background: #374151;
         }
+        QSlider#volumeSlider::groove:horizontal {
+            height: 4px;
+            border-radius: 2px;
+            background: #E5E7EB;
+        }
+        QSlider#volumeSlider::handle:horizontal {
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+            background: #111827;
+        }
         QPushButton {
             border: none;
             border-radius: 8px;
@@ -1082,6 +1235,18 @@ def apply_style(app: QApplication) -> None:
             background: #E5E7EB;
         }
         QPushButton#secondaryButton:pressed {
+            background: #D1D5DB;
+        }
+        QPushButton#iconButton {
+            background: #F3F4F6;
+            border: none;
+            border-radius: 8px;
+            padding: 0;
+        }
+        QPushButton#iconButton:hover {
+            background: #E5E7EB;
+        }
+        QPushButton#iconButton:pressed {
             background: #D1D5DB;
         }
         QPushButton:disabled {
@@ -1159,8 +1324,18 @@ def apply_style(app: QApplication) -> None:
             background: #FFFFFF;
             color: #374151;
             border: 1px solid #E5E7EB;
-            padding: 6px 10px;
-            border-radius: 6px;
+            padding: 8px 10px;
+            border-radius: 8px;
+        }
+        QFrame#floatingTip {
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+        }
+        QLabel#floatingTipText {
+            color: #374151;
+            font-size: 12px;
+            font-weight: 500;
         }
         """
     )

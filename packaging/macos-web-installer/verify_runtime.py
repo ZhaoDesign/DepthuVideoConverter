@@ -21,6 +21,8 @@ def main() -> None:
         "numpy": "numpy",
         "imageio_ffmpeg": "imageio_ffmpeg",
         "PySide6": "PySide6",
+        "QtMultimedia": "PySide6.QtMultimedia",
+        "QtMultimediaWidgets": "PySide6.QtMultimediaWidgets",
     }
     versions: dict[str, str] = {}
     for label, module_name in modules.items():

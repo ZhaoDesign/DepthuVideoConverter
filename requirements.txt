@@ -11,6 +11,7 @@ pydantic<2.11
 
 # --- Native desktop UI ---
 PySide6-Essentials>=6.7,<6.8
+PySide6-Addons>=6.7,<6.8
 
 # --- Deep-learning runtime ---
 onnxruntime>=1.17
