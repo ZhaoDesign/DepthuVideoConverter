@@ -15,6 +15,22 @@ APP_TITLE = "视频深度控制图工具"
 APP_DIR_NAME = "DepthVideoConverter"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 
+WINDOW_WIDTH = 1110
+WINDOW_HEIGHT = 800
+TITLE_BAR_HEIGHT = 36
+PANEL_WIDTH = 527
+PANEL_HEIGHT = 744
+INNER_WIDTH = 495
+VIDEO_SURFACE_HEIGHT = 321
+TRANSPORT_HEIGHT = 32
+MEDIA_AREA_HEIGHT = VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT
+
+MODEL_DISPLAY_LABELS = {
+    "Small (fastest, ~99 MB)": "Small（fastest,~99 MB）",
+    "Base (balanced, ~392 MB)": "Base（balance, ~392MB）",
+    "Large (best quality, ~1.3 GB)": "Large（best, ~1.3GB）",
+}
+
 _script_dir = str(Path(__file__).resolve().parent)
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
@@ -66,7 +82,7 @@ DATA_DIR = _configure_runtime()
 
 try:
     from PySide6.QtCore import QPoint, QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QAction, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter  # noqa: E402
+    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter  # noqa: E402
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
     from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
@@ -82,6 +98,7 @@ try:
         QLabel,
         QListView,
         QMainWindow,
+        QMenu,
         QMenuBar,
         QMessageBox,
         QPushButton,
@@ -293,16 +310,19 @@ class ComboItemDelegate(QStyledItemDelegate):
         bg_rect = opt.rect.adjusted(6, 3, -6, -3)
         if selected:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#111827"))
+            painter.setBrush(QColor("#F9FAFB"))
             painter.drawRoundedRect(bg_rect, 7, 7)
         elif hovered:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#F3F4F6"))
             painter.drawRoundedRect(bg_rect, 7, 7)
 
-        text_rect = opt.rect.adjusted(16, 0, -16, 0)
-        painter.setPen(QColor("#FFFFFF" if selected else "#374151"))
+        text_rect = opt.rect.adjusted(16, 0, -42, 0)
+        painter.setPen(QColor("#344252"))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, opt.text)
+        if selected:
+            painter.setPen(QColor("#0F1828"))
+            painter.drawText(opt.rect.adjusted(0, 0, -22, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "✓")
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:  # type: ignore[override]
@@ -318,9 +338,204 @@ def _configure_combo(combo: QComboBox) -> None:
     combo.setView(view)
     combo.setItemDelegate(ComboItemDelegate(combo))
     combo.setMaxVisibleItems(8)
-    combo.setMinimumHeight(38)
+    combo.setFixedHeight(36)
     combo.setCursor(Qt.CursorShape.PointingHandCursor)
     combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+
+
+def _model_display_label(model_key: str) -> str:
+    return MODEL_DISPLAY_LABELS.get(model_key, model_key)
+
+
+def _combo_value(combo: QComboBox) -> str:
+    data = combo.currentData()
+    return str(data) if data is not None else combo.currentText()
+
+
+def _set_combo_data(combo: QComboBox, value: str) -> None:
+    index = combo.findData(value)
+    if index >= 0:
+        combo.setCurrentIndex(index)
+    else:
+        combo.setCurrentText(value)
+
+
+class StaticTransportControls(QFrame):
+    """Non-playing controls used below the empty input drop target."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("transportControls")
+        self.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+
+        controls = QHBoxLayout(self)
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(12)
+
+        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self, size=32)
+        controls.addWidget(self._play_btn)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(0, 100)
+        self._slider.setValue(0)
+        self._slider.setFixedWidth(263)
+        controls.addWidget(self._slider)
+
+        self._time_label = QLabel("0:00 / 0:00")
+        self._time_label.setObjectName("muted")
+        self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._time_label.setFixedWidth(64)
+        controls.addWidget(self._time_label)
+
+        self._mute_btn = IconButton("icon-volume.png", "开启 / 关闭声音", self, size=32)
+        controls.addWidget(self._mute_btn)
+
+        self._volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._volume_slider.setObjectName("volumeSlider")
+        self._volume_slider.setRange(0, 100)
+        self._volume_slider.setValue(80)
+        self._volume_slider.setFixedWidth(56)
+        controls.addWidget(self._volume_slider)
+
+
+class TopBar(QFrame):
+    """Figma-style title/menu bar with custom window controls."""
+
+    def __init__(self, window: QMainWindow) -> None:
+        super().__init__(window)
+        self._window = window
+        self._drag_offset: QPoint | None = None
+        self.setObjectName("topBar")
+        self.setFixedHeight(TITLE_BAR_HEIGHT)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 0, 0, 0)
+        layout.setSpacing(8)
+
+        layout.addWidget(self._menu_button("文件", self._file_menu()))
+        layout.addWidget(self._menu_button("设置", self._settings_menu()))
+        layout.addWidget(self._menu_button("模型", self._model_menu()))
+        layout.addWidget(self._menu_button("帮助", self._help_menu()))
+        layout.addStretch(1)
+
+        self._min_btn = self._window_button("−", "最小化")
+        self._max_btn = self._window_button("□", "最大化")
+        self._close_btn = self._window_button("×", "关闭", role="close")
+        self._min_btn.clicked.connect(window.showMinimized)
+        self._max_btn.clicked.connect(self._toggle_maximized)
+        self._close_btn.clicked.connect(window.close)
+        layout.addWidget(self._min_btn)
+        layout.addWidget(self._max_btn)
+        layout.addWidget(self._close_btn)
+
+    def _menu(self) -> QMenu:
+        menu = QMenu(self)
+        menu.setObjectName("figmaMenu")
+        return menu
+
+    def _menu_button(self, text: str, menu: QMenu) -> QPushButton:
+        button = QPushButton(text, self)
+        button.setObjectName("topMenuButton")
+        button.setFixedSize(40, 28)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(lambda _checked=False, b=button, m=menu: m.popup(b.mapToGlobal(QPoint(0, b.height()))))
+        return button
+
+    def _window_button(self, text: str, tooltip: str, role: str = "") -> QPushButton:
+        button = QPushButton(text, self)
+        button.setObjectName("windowControlButton")
+        if role:
+            button.setProperty("role", role)
+        button.setToolTip(tooltip)
+        button.setFixedSize(46, TITLE_BAR_HEIGHT)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        return button
+
+    def _file_menu(self) -> QMenu:
+        menu = self._menu()
+        open_act = QAction("打开视频", self)
+        open_act.triggered.connect(self._window._choose_input)
+        menu.addAction(open_act)
+        menu.addSeparator()
+        quit_act = QAction("退出", self)
+        quit_act.triggered.connect(self._window.close)
+        menu.addAction(quit_act)
+        return menu
+
+    def _settings_menu(self) -> QMenu:
+        menu = self._menu()
+        model_dir_act = QAction("模型目录", self)
+        model_dir_act.triggered.connect(self._window._change_model_dir)
+        menu.addAction(model_dir_act)
+        output_dir_act = QAction("输出目录", self)
+        output_dir_act.triggered.connect(self._window._change_output_dir)
+        menu.addAction(output_dir_act)
+        menu.addSeparator()
+        uninstall_act = QAction("卸载应用", self)
+        uninstall_act.triggered.connect(self._window._uninstall_app)
+        menu.addAction(uninstall_act)
+        return menu
+
+    def _model_menu(self) -> QMenu:
+        menu = self._menu()
+        for name, cfg in MODEL_DEFS.items():
+            sub = self._menu()
+            sub.setTitle(name.split(" (")[0])
+            for index, url in enumerate(cfg["urls"]):
+                source = "镜像" if index == 0 else ("官方" if index == 1 else "代理")
+                act = QAction(f"{source}：{_short_path(url, 24)}", self)
+                act.triggered.connect(lambda _checked=False, u=url: QDesktopServices.openUrl(QUrl(u)))
+                sub.addAction(act)
+            menu.addMenu(sub)
+        return menu
+
+    def _help_menu(self) -> QMenu:
+        menu = self._menu()
+        about_act = QAction("关于", self)
+        about_act.triggered.connect(
+            lambda: _show_dialog(
+                self._window,
+                "关于",
+                f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool",
+            )
+        )
+        menu.addAction(about_act)
+        github_act = QAction("Github", self)
+        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
+        menu.addAction(github_act)
+        return menu
+
+    def _toggle_maximized(self) -> None:
+        if self._window.isMaximized():
+            self._window.showNormal()
+            self._window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        else:
+            self._window.showMaximized()
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton and not self._window.isMaximized():
+            self._window.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._toggle_maximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class VideoPlayer(QFrame):
@@ -329,6 +544,7 @@ class VideoPlayer(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("videoPlayer")
+        self.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
         self._duration = 0
         self._slider_dragging = False
 
@@ -339,12 +555,13 @@ class VideoPlayer(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(12)
 
         self._video_box = QFrame()
         self._video_box.setObjectName("videoSurface")
-        self._video_box.setMinimumHeight(200)
-        self._video_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._video_box.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
+        self._video_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._apply_rounded_mask(self._video_box)
         self._video_stack = QStackedLayout(self._video_box)
         self._video_stack.setContentsMargins(0, 0, 0, 0)
         self._video_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
@@ -356,6 +573,8 @@ class VideoPlayer(QFrame):
 
         self._video = QVideoWidget()
         self._video.setObjectName("videoWidget")
+        self._video.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
+        self._apply_rounded_mask(self._video)
         self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
         self._video_stack.addWidget(self._video)
         self._video_stack.setCurrentWidget(self._placeholder)
@@ -363,21 +582,33 @@ class VideoPlayer(QFrame):
         self._player.setVideoOutput(self._video)
         layout.addWidget(self._video_box, 1)
 
-        controls = QHBoxLayout()
-        controls.setSpacing(10)
-        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self)
+        self._fullscreen_btn = QPushButton("⛶", self)
+        self._fullscreen_btn.setObjectName("fullscreenGlyph")
+        self._fullscreen_btn.setFixedSize(28, 28)
+        self._fullscreen_btn.move(INNER_WIDTH - 42, VIDEO_SURFACE_HEIGHT - 42)
+        self._fullscreen_btn.hide()
+
+        controls_widget = QFrame(self)
+        controls_widget.setObjectName("transportControls")
+        controls_widget.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+        controls = QHBoxLayout(controls_widget)
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(12)
+        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self, size=32)
         self._play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self._play_btn)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 0)
+        self._slider.setFixedWidth(263)
         self._slider.sliderPressed.connect(self._on_slider_press)
         self._slider.sliderReleased.connect(self._on_slider_release)
-        controls.addWidget(self._slider, 1)
+        controls.addWidget(self._slider)
 
         self._time_label = QLabel("0:00 / 0:00")
         self._time_label.setObjectName("muted")
-        self._time_label.setFixedWidth(100)
+        self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._time_label.setFixedWidth(64)
         controls.addWidget(self._time_label)
 
         self._mute_btn = IconButton("icon-volume.png", "开启 / 关闭声音", self, size=32)
@@ -388,22 +619,36 @@ class VideoPlayer(QFrame):
         self._volume_slider.setObjectName("volumeSlider")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(86)
+        self._volume_slider.setFixedWidth(56)
         self._volume_slider.valueChanged.connect(self._on_volume_changed)
         controls.addWidget(self._volume_slider)
 
-        layout.addLayout(controls)
+        layout.addWidget(controls_widget)
 
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.playbackStateChanged.connect(self._on_playback_state_changed)
         self._player.errorOccurred.connect(self._on_error)
 
+    def _apply_rounded_mask(self, widget: QWidget) -> None:
+        mask = QBitmap(widget.size())
+        mask.fill(Qt.GlobalColor.color0)
+        painter = QPainter(mask)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(Qt.GlobalColor.color1)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(widget.rect(), 16, 16)
+        painter.end()
+        widget.setMask(mask)
+
     def load(self, path: str) -> None:
         self.stop()
         self._duration = 0
         self._player.setSource(QUrl.fromLocalFile(path))
-        self._video_stack.setCurrentWidget(self._video)
+        self._placeholder.setText("")
+        self._video_stack.setCurrentWidget(self._placeholder)
+        self._fullscreen_btn.show()
+        self._fullscreen_btn.raise_()
         self._slider.setRange(0, 0)
         self._slider.setValue(0)
         self._time_label.setText("0:00 / 0:00")
@@ -418,6 +663,7 @@ class VideoPlayer(QFrame):
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
         else:
+            self._video_stack.setCurrentWidget(self._video)
             self._player.play()
 
     def _toggle_mute(self) -> None:
@@ -457,6 +703,7 @@ class VideoPlayer(QFrame):
         if error != QMediaPlayer.Error.NoError:
             self._placeholder.setText("无法播放视频")
             self._video_stack.setCurrentWidget(self._placeholder)
+            self._fullscreen_btn.hide()
             self._time_label.setText("无法播放")
 
     def _update_volume_icon(self) -> None:
@@ -474,20 +721,22 @@ class VideoPlayer(QFrame):
         self._player.setSource(QUrl())
         self._placeholder.setText("尚未加载视频")
         self._video_stack.setCurrentWidget(self._placeholder)
+        self._fullscreen_btn.hide()
 
 
 class DropPanel(QFrame):
     file_dropped = Signal(str)
+    browse_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("dropPanel")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(140)
+        self.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
         title = QLabel("拖入视频文件")
         title.setObjectName("dropTitle")
@@ -496,18 +745,19 @@ class DropPanel(QFrame):
         subtitle.setObjectName("muted")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.file_label = QLabel("尚未选择视频")
-        self.file_label.setObjectName("filePill")
-        self.file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.choose_button = QPushButton("选择视频")
+        self.choose_button.setObjectName("secondaryButton")
+        self.choose_button.setFixedHeight(32)
+        self.choose_button.clicked.connect(self.browse_requested.emit)
 
         layout.addStretch(1)
         layout.addWidget(title)
         layout.addWidget(subtitle)
-        layout.addWidget(self.file_label)
+        layout.addWidget(self.choose_button)
         layout.addStretch(1)
 
     def set_file(self, path: str | None) -> None:
-        self.file_label.setText(Path(path).name if path else "尚未选择视频")
+        self.choose_button.setText(Path(path).name if path else "选择视频")
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if self._first_video_path(event.mimeData().urls()):
@@ -605,14 +855,14 @@ class ContourControlWindow(QMainWindow):
         self.worker: ConversionWorker | None = None
 
         self.setWindowTitle(APP_TITLE)
-        self.setMinimumSize(QSize(980, 680))
-        self.resize(1120, 760)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setMinimumSize(QSize(WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         icon_path = _asset_path("depth-video-converter.ico")
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
 
         self._build_ui()
-        self._build_menubar()
         self._refresh_status()
 
     def _build_ui(self) -> None:
@@ -621,16 +871,17 @@ class ContourControlWindow(QMainWindow):
         self.setCentralWidget(root)
 
         main = QVBoxLayout(root)
-        main.setContentsMargins(28, 24, 28, 24)
-        main.setSpacing(20)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
 
-        main.addLayout(self._build_header())
+        main.addWidget(TopBar(self))
 
         content = QHBoxLayout()
-        content.setSpacing(20)
+        content.setContentsMargins(16, 4, 16, 16)
+        content.setSpacing(24)
         content.addWidget(self._build_left_panel(), 0)
-        content.addWidget(self._build_right_panel(), 1)
-        main.addLayout(content, 1)
+        content.addWidget(self._build_right_panel(), 0)
+        main.addLayout(content)
 
     def _build_menubar(self) -> None:
         mb = self.menuBar()
@@ -684,12 +935,17 @@ class ContourControlWindow(QMainWindow):
 
     def _uninstall_app(self) -> None:
         import subprocess
-        uninstall_exe = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Contour Control Tool" / "unins000.exe"
-        if uninstall_exe.is_file():
-            subprocess.Popen([str(uninstall_exe)])
-            self.close()
-        else:
-            _show_dialog(self, "卸载", f"未找到卸载程序。\n请手动删除安装目录。")
+        candidates = [
+            Path(__file__).resolve().parent.parent / "unins000.exe",
+            Path(__file__).resolve().parent / "unins000.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Contour Control Tool" / "unins000.exe",
+        ]
+        for uninstall_exe in candidates:
+            if uninstall_exe.is_file():
+                subprocess.Popen([str(uninstall_exe)])
+                self.close()
+                return
+        _show_dialog(self, "卸载", "未找到卸载程序。\n请手动删除安装目录。")
 
     def _change_model_dir(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "选择模型目录", str(MODELS_DIR))
@@ -703,7 +959,7 @@ class ContourControlWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(self, "选择默认输出目录", str(Path.home() / "Desktop"))
         if d:
             self.output_dir = d
-            self.output_dir_label.setText(f"输出到：{_short_path(d, 28)}")
+            self.output_dir_label.setText(f"输出到： {_short_path(d, 28)}")
 
     def _open_model_dir(self) -> None:
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -714,16 +970,19 @@ class ContourControlWindow(QMainWindow):
         self._refresh_models()
 
     def _refresh_models(self) -> None:
-        current = self.model_combo.currentText()
+        current = _combo_value(self.model_combo)
         self.model_combo.clear()
         items = list(MODEL_DEFS.keys())
+        for key in items:
+            self.model_combo.addItem(_model_display_label(key), key)
         for f in sorted(MODELS_DIR.glob("*.onnx")):
             name = f.stem
             if not any(name in str(cfg["path"]) for cfg in MODEL_DEFS.values()):
-                items.append(f"{name} (自定义)")
-        self.model_combo.addItems(items)
+                custom = f"{name} (自定义)"
+                items.append(custom)
+                self.model_combo.addItem(custom, custom)
         if current in items:
-            self.model_combo.setCurrentText(current)
+            _set_combo_data(self.model_combo, current)
 
     def _build_header(self) -> QHBoxLayout:
         header = QHBoxLayout()
@@ -742,84 +1001,127 @@ class ContourControlWindow(QMainWindow):
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
-        panel.setFixedWidth(420)
+        panel.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
         section = QLabel("输入视频")
         section.setObjectName("sectionTitle")
+        section.setFixedHeight(17)
         layout.addWidget(section)
 
+        media_area = QWidget()
+        media_area.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+        self.input_media_stack = QStackedLayout(media_area)
+        self.input_media_stack.setContentsMargins(0, 0, 0, 0)
+
+        empty_media = QWidget()
+        empty_media.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+        empty_layout = QVBoxLayout(empty_media)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
+        empty_layout.setSpacing(12)
         self.drop_panel = DropPanel()
         self.drop_panel.file_dropped.connect(self._set_input_path)
-        layout.addWidget(self.drop_panel)
+        self.drop_panel.browse_requested.connect(self._choose_input)
+        empty_layout.addWidget(self.drop_panel)
+        empty_layout.addWidget(StaticTransportControls(self))
+        self.input_media_stack.addWidget(empty_media)
 
         self._src_player = VideoPlayer()
-        self._src_player.setVisible(False)
-        layout.addWidget(self._src_player, 1)
-
-        browse_btn = QPushButton("选择视频")
-        browse_btn.setObjectName("secondaryButton")
-        browse_btn.clicked.connect(self._choose_input)
-        layout.addWidget(browse_btn)
+        self.input_media_stack.addWidget(self._src_player)
+        self.input_media_stack.setCurrentWidget(empty_media)
+        layout.addWidget(media_area)
 
         settings_title = QLabel("转换参数")
         settings_title.setObjectName("sectionTitle")
+        settings_title.setFixedHeight(17)
         layout.addWidget(settings_title)
 
-        form = QGridLayout()
-        form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(14)
-
         self.model_combo = QComboBox()
-        self.model_combo.addItems(list(MODEL_DEFS.keys()))
-        self.model_combo.setCurrentText("Small (fastest, ~99 MB)")
+        for key in MODEL_DEFS:
+            self.model_combo.addItem(_model_display_label(key), key)
+        _set_combo_data(self.model_combo, "Small (fastest, ~99 MB)")
         _configure_combo(self.model_combo)
 
         self.model_folder_btn = IconButton("icon-folder.png", "打开模型目录", self)
+        self.model_folder_btn.setFixedSize(32, 32)
         self.model_folder_btn.clicked.connect(self._open_model_dir)
 
         self.resolution_combo = QComboBox()
-        self.resolution_combo.addItems(list(RESOLUTION_PRESETS.keys()))
-        self.resolution_combo.setCurrentText("Original")
+        for key in RESOLUTION_PRESETS:
+            self.resolution_combo.addItem(key, key)
+        _set_combo_data(self.resolution_combo, "Original")
         _configure_combo(self.resolution_combo)
 
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
         self.smoothing_slider.setValue(60)
+        self.smoothing_slider.setFixedWidth(415)
         self.smoothing_value = QLabel("60")
+        self.smoothing_value.setObjectName("muted")
+        self.smoothing_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.smoothing_value.setFixedWidth(20)
         self.smoothing_slider.valueChanged.connect(lambda value: self.smoothing_value.setText(str(value)))
 
-        form.addWidget(self._field_label("模型"), 0, 0)
-        form.addWidget(self.model_combo, 0, 1)
-        form.addWidget(self.model_folder_btn, 0, 2)
-        form.addWidget(self._field_label("分辨率"), 1, 0)
-        form.addWidget(self.resolution_combo, 1, 1, 1, 2)
-        form.addWidget(self._field_label("平滑"), 2, 0)
-        form.addWidget(self.smoothing_slider, 2, 1)
-        form.addWidget(self.smoothing_value, 2, 2)
-        layout.addLayout(form)
+        model_row_widget = QWidget()
+        model_row_widget.setFixedSize(INNER_WIDTH, 36)
+        model_row = QHBoxLayout(model_row_widget)
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_row.setSpacing(12)
+        model_row.addWidget(self._field_label("模型"))
+        self.model_combo.setFixedWidth(403)
+        model_row.addWidget(self.model_combo)
+        model_row.addWidget(self.model_folder_btn)
+        layout.addWidget(model_row_widget)
+
+        resolution_row_widget = QWidget()
+        resolution_row_widget.setFixedSize(INNER_WIDTH, 36)
+        resolution_row = QHBoxLayout(resolution_row_widget)
+        resolution_row.setContentsMargins(0, 0, 0, 0)
+        resolution_row.setSpacing(12)
+        resolution_row.addWidget(self._field_label("分辨率"))
+        self.resolution_combo.setFixedWidth(447)
+        resolution_row.addWidget(self.resolution_combo)
+        layout.addWidget(resolution_row_widget)
+
+        smoothing_row_widget = QWidget()
+        smoothing_row_widget.setFixedSize(INNER_WIDTH, 17)
+        smoothing_row = QHBoxLayout(smoothing_row_widget)
+        smoothing_row.setContentsMargins(0, 0, 0, 0)
+        smoothing_row.setSpacing(12)
+        smoothing_row.addWidget(self._field_label("平滑"))
+        smoothing_row.addWidget(self.smoothing_slider)
+        smoothing_row.addWidget(self.smoothing_value)
+        layout.addWidget(smoothing_row_widget)
 
         self.invert_check = QCheckBox("黑白反转")
-        self.preserve_audio_check = QCheckBox("保留原始音频")
+        self.invert_check.setFixedHeight(20)
+        self.preserve_audio_check = QCheckBox("黑白反转")
+        self.preserve_audio_check.setToolTip("保留原始音频")
+        self.preserve_audio_check.setFixedHeight(20)
         self.preserve_audio_check.setChecked(True)
         layout.addWidget(self.invert_check)
         layout.addWidget(self.preserve_audio_check)
 
-        output_row = QHBoxLayout()
-        self.output_dir_label = QLabel("输出到：跟随输入视频")
+        output_row_widget = QWidget()
+        output_row_widget.setFixedSize(INNER_WIDTH, 32)
+        output_row = QHBoxLayout(output_row_widget)
+        output_row.setContentsMargins(0, 0, 0, 0)
+        self.output_dir_label = QLabel("输出到： 跟随输入视频")
         self.output_dir_label.setObjectName("muted")
-        output_btn = QPushButton("输出位置")
-        output_btn.setObjectName("secondaryButton")
-        output_btn.clicked.connect(self._choose_output_dir)
+        self.output_dir_label.setFixedHeight(32)
+        self.output_btn = QPushButton("输出位置")
+        self.output_btn.setObjectName("secondaryButton")
+        self.output_btn.setFixedSize(84, 32)
+        self.output_btn.clicked.connect(self._choose_output_dir)
         output_row.addWidget(self.output_dir_label, 1)
-        output_row.addWidget(output_btn)
-        layout.addLayout(output_row)
+        output_row.addWidget(self.output_btn)
+        layout.addWidget(output_row_widget)
 
         self.start_btn = QPushButton("开始转换")
         self.start_btn.setObjectName("primaryButton")
-        self.start_btn.setMinimumHeight(44)
+        self.start_btn.setFixedHeight(44)
         self.start_btn.clicked.connect(self._start_conversion)
         layout.addWidget(self.start_btn)
 
@@ -828,49 +1130,51 @@ class ContourControlWindow(QMainWindow):
     def _build_right_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
+        panel.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
         title = QLabel("深度视频")
         title.setObjectName("sectionTitle")
+        title.setFixedHeight(17)
         layout.addWidget(title)
 
         self._video_player = VideoPlayer()
-        layout.addWidget(self._video_player, 2)
+        layout.addWidget(self._video_player)
 
-        # Task status section
-        top = QHBoxLayout()
         status_title = QLabel("任务状态")
         status_title.setObjectName("sectionTitle")
+        status_title.setFixedHeight(17)
+        layout.addWidget(status_title)
         self.state_label = QLabel("等待视频")
-        self.state_label.setObjectName("statePill")
-        top.addWidget(status_title)
-        top.addStretch(1)
-        top.addWidget(self.state_label)
-        layout.addLayout(top)
+        self.state_label.setVisible(False)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedSize(INNER_WIDTH, 12)
         layout.addWidget(self.progress_bar)
 
         self.progress_label = QLabel("选择一个视频后开始转换。")
         self.progress_label.setObjectName("muted")
+        self.progress_label.setFixedHeight(17)
         layout.addWidget(self.progress_label)
 
         self.log_box = QPlainTextEdit()
         self.log_box.setObjectName("logBox")
         self.log_box.setReadOnly(True)
         self.log_box.setPlaceholderText("转换进度和模型下载状态会显示在这里")
-        layout.addWidget(self.log_box, 1)
+        self.log_box.setFixedSize(INNER_WIDTH, 156)
+        layout.addWidget(self.log_box)
 
         result = QFrame()
         result.setObjectName("resultPanel")
+        result.setFixedSize(INNER_WIDTH, 56)
         result_layout = QHBoxLayout(result)
-        result_layout.setContentsMargins(16, 14, 16, 14)
-        result_layout.setSpacing(14)
+        result_layout.setContentsMargins(12, 12, 12, 12)
+        result_layout.setSpacing(12)
 
         self.result_label = QLabel("尚未生成输出视频")
         self.result_label.setObjectName("resultText")
@@ -879,6 +1183,7 @@ class ContourControlWindow(QMainWindow):
         self.open_folder_btn = QPushButton("打开文件夹")
         for button in (self.open_output_btn, self.open_folder_btn):
             button.setObjectName("secondaryButton")
+            button.setFixedSize(84, 32)
             button.setEnabled(False)
         self.open_output_btn.clicked.connect(self._open_output)
         self.open_folder_btn.clicked.connect(self._open_output_folder)
@@ -893,17 +1198,15 @@ class ContourControlWindow(QMainWindow):
     def _field_label(text: str) -> QLabel:
         label = QLabel(text)
         label.setObjectName("fieldLabel")
+        label.setFixedWidth(36)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         return label
 
     def _refresh_status(self) -> None:
         device_type, device_desc = detect_device()
-        self.device_badge.setText(device_desc)
-        self.device_badge.setProperty("kind", device_type)
-        self.ffmpeg_badge.setText("FFmpeg 已就绪" if ffmpeg_available() else "FFmpeg 未就绪")
-        self.ffmpeg_badge.setProperty("kind", "ok" if ffmpeg_available() else "warn")
-        for badge in (self.device_badge, self.ffmpeg_badge):
-            badge.style().unpolish(badge)
-            badge.style().polish(badge)
+        self.device_type = device_type
+        self.device_desc = device_desc
+        self.ffmpeg_ready = ffmpeg_available()
 
     def _choose_input(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -918,22 +1221,20 @@ class ContourControlWindow(QMainWindow):
     def _set_input_path(self, path: str) -> None:
         self.input_path = path
         self.drop_panel.set_file(path)
-        self.drop_panel.setVisible(False)
-        self._src_player.setVisible(True)
+        self.input_media_stack.setCurrentWidget(self._src_player)
         self._src_player.load(path)
         if not hasattr(self, "output_dir"):
             self.output_dir = str(_default_output_dir(path))
-            self.output_dir_label.setText(f"输出到：{_short_path(self.output_dir, 28)}")
-        self.progress_label.setText(_short_path(path))
+            self.output_dir_label.setText(f"输出到： {_short_path(self.output_dir, 28)}")
+        self.progress_label.setText("选择一个视频后开始转换。")
         self.state_label.setText("已选择视频")
-        self._append_log(f"输入：{path}")
 
     def _choose_output_dir(self) -> None:
         start_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
         path = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
         if path:
             self.output_dir = path
-            self.output_dir_label.setText(f"输出到：{_short_path(path, 28)}")
+            self.output_dir_label.setText(f"输出到： {_short_path(path, 28)}")
 
     def _start_conversion(self) -> None:
         if self.worker_thread is not None and self.worker_thread.isRunning():
@@ -959,8 +1260,8 @@ class ContourControlWindow(QMainWindow):
         self.worker = ConversionWorker(
             input_path=self.input_path,
             output_dir=output_dir,
-            model_label=self.model_combo.currentText(),
-            resolution=self.resolution_combo.currentText(),
+            model_label=_combo_value(self.model_combo),
+            resolution=_combo_value(self.resolution_combo),
             invert=self.invert_check.isChecked(),
             smoothing=self.smoothing_slider.value(),
             preserve_audio=self.preserve_audio_check.isChecked(),
@@ -1009,10 +1310,12 @@ class ContourControlWindow(QMainWindow):
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.start_btn.setEnabled(enabled)
         self.model_combo.setEnabled(enabled)
+        self.model_folder_btn.setEnabled(enabled)
         self.resolution_combo.setEnabled(enabled)
         self.smoothing_slider.setEnabled(enabled)
         self.invert_check.setEnabled(enabled)
         self.preserve_audio_check.setEnabled(enabled)
+        self.output_btn.setEnabled(enabled)
 
     def _append_log(self, text: str) -> None:
         stamp = time.strftime("%H:%M:%S")
@@ -1042,107 +1345,152 @@ def apply_style(app: QApplication) -> None:
         """
         QWidget#root {
             background: #FFFFFF;
-            color: #374151;
+            color: #0F1828;
+            font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI";
+            font-size: 12px;
         }
         QLabel {
-            color: #374151;
-        }
-        QLabel#appTitle {
-            color: #111827;
-            font-size: 20px;
-            font-weight: 600;
+            color: #0F1828;
         }
         QLabel#sectionTitle {
-            color: #111827;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        QLabel#muted {
-            color: #6B7280;
-        }
-        QLabel#fieldLabel {
-            color: #6B7280;
+            color: #0F1828;
+            font-size: 12px;
             font-weight: 500;
         }
-        QLabel#appIcon {
+        QLabel#muted {
+            color: #6C7583;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        QLabel#fieldLabel {
+            color: #6C7583;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        QFrame#topBar {
+            background: #FFFFFF;
+            border: none;
+        }
+        QPushButton#topMenuButton {
+            background: transparent;
+            color: #6C7583;
+            border: none;
+            border-radius: 4px;
+            padding: 0;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 400;
+        }
+        QPushButton#topMenuButton:hover {
+            background: transparent;
+        }
+        QPushButton#topMenuButton:pressed {
+            background: transparent;
+        }
+        QPushButton#windowControlButton {
+            background: transparent;
+            color: #111111;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            font-size: 18px;
+            font-weight: 400;
+        }
+        QPushButton#windowControlButton:hover {
             background: #F3F4F6;
-            border: 1px solid #E5E7EB;
-            border-radius: 10px;
+        }
+        QPushButton#windowControlButton[role="close"]:hover {
+            background: #E81123;
+            color: #FFFFFF;
+        }
+        QMenu {
+            background: #FFFFFF;
+            color: #6C7583;
+            border: none;
+            border-radius: 4px;
+            padding: 4px;
+            font-family: "PingFang SC", "Microsoft YaHei UI", "Segoe UI";
+            font-size: 12px;
+        }
+        QMenu::item {
+            height: 28px;
+            min-width: 112px;
+            padding: 0 12px;
+            border-radius: 4px;
+        }
+        QMenu::item:selected {
+            background: #F9FAFB;
+            color: #6C7583;
+        }
+        QMenu::separator {
+            height: 1px;
+            background: #F3F4F6;
+            margin: 4px 0;
         }
         QFrame#panel {
             background: #F9FAFB;
             border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            border-radius: 16px;
         }
         QFrame#dropPanel {
             background: #F9FAFB;
-            border: 2px dashed #D1D5DB;
-            border-radius: 10px;
+            border: 2px dashed #D0D5DC;
+            border-radius: 16px;
         }
         QFrame#dropPanel[dragging="true"] {
             background: #F3F4F6;
-            border: 2px solid #9CA3AF;
+            border: 2px solid #D0D5DC;
         }
         QFrame#videoPlayer {
             background: transparent;
+            border: none;
+        }
+        QFrame#transportControls {
+            background: transparent;
+            border: none;
         }
         QFrame#videoSurface {
             background: #000000;
-            border-radius: 8px;
+            border-radius: 16px;
         }
         QVideoWidget#videoWidget {
             background: #000000;
         }
         QLabel#videoPlaceholder {
             background: #000000;
-            color: #9CA3AF;
-            border-radius: 8px;
-            font-size: 13px;
+            color: #9AA3B0;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
         }
         QLabel#dropTitle {
-            color: #111827;
+            color: #0F1828;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton#fullscreenGlyph {
+            background: transparent;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 0;
+            padding: 0;
             font-size: 17px;
-            font-weight: 500;
-        }
-        QLabel#filePill, QLabel#statePill {
-            border-radius: 12px;
-            padding: 5px 12px;
-            background: #F3F4F6;
-            color: #374151;
-            font-weight: 500;
-        }
-        QLabel#badge {
-            border-radius: 12px;
-            padding: 5px 12px;
-            background: #F3F4F6;
-            color: #374151;
-            font-weight: 500;
-        }
-        QLabel#badge[kind="cuda"], QLabel#badge[kind="ok"] {
-            background: #F3F4F6;
-            color: #111827;
-        }
-        QLabel#badge[kind="cpu"] {
-            background: #F3F4F6;
-            color: #374151;
-        }
-        QLabel#badge[kind="warn"] {
-            background: #FFFBEB;
-            color: #D97706;
+            font-weight: 400;
         }
         QComboBox {
             background: #FFFFFF;
-            color: #374151;
+            color: #344252;
             border: 1px solid #E5E7EB;
             border-radius: 8px;
-            padding: 8px 34px 8px 12px;
-            min-height: 20px;
+            padding: 0 34px 0 12px;
+            font-size: 10px;
+            font-weight: 500;
         }
         QComboBox:hover {
-            border-color: #9CA3AF;
+            border-color: #D0D5DC;
         }
         QComboBox:focus {
-            border: 1px solid #111827;
+            border: 1px solid #D0D5DC;
         }
         QComboBox::drop-down {
             width: 30px;
@@ -1156,31 +1504,33 @@ def apply_style(app: QApplication) -> None:
         }
         QComboBox QAbstractItemView {
             background: #FFFFFF;
-            color: #374151;
+            color: #344252;
             border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            border-radius: 8px;
             selection-background-color: transparent;
-            selection-color: #111827;
+            selection-color: #344252;
             outline: none;
             padding: 6px;
         }
         QCheckBox {
             spacing: 10px;
-            color: #374151;
+            color: #0F1828;
+            font-size: 12px;
+            font-weight: 500;
         }
         QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border-radius: 5px;
-            border: 1px solid #D1D5DB;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid #D0D5DC;
             background: #FFFFFF;
         }
         QCheckBox::indicator:hover {
-            border-color: #6B7280;
+            border-color: #6C7583;
         }
         QCheckBox::indicator:checked {
-            background: #111827;
-            border-color: #111827;
+            background: #0F1828;
+            border-color: #0F1828;
             image: url(""" + check_icon + """);
         }
         QSlider::groove:horizontal {
@@ -1193,10 +1543,10 @@ def apply_style(app: QApplication) -> None:
             height: 16px;
             margin: -6px 0;
             border-radius: 8px;
-            background: #111827;
+            background: #121A2B;
         }
         QSlider::handle:horizontal:hover {
-            background: #374151;
+            background: #0F1828;
         }
         QSlider#volumeSlider::groove:horizontal {
             height: 4px;
@@ -1208,28 +1558,29 @@ def apply_style(app: QApplication) -> None:
             height: 14px;
             margin: -5px 0;
             border-radius: 7px;
-            background: #111827;
+            background: #121A2B;
         }
         QPushButton {
             border: none;
             border-radius: 8px;
-            padding: 9px 16px;
+            padding: 0 16px;
+            font-size: 12px;
             font-weight: 600;
         }
         QPushButton#primaryButton {
-            background: #111827;
+            background: #0F1828;
             color: #FFFFFF;
             font-size: 14px;
         }
         QPushButton#primaryButton:hover {
-            background: #374151;
+            background: #121A2B;
         }
         QPushButton#primaryButton:pressed {
             background: #000000;
         }
         QPushButton#secondaryButton {
             background: #F3F4F6;
-            color: #374151;
+            color: #344252;
         }
         QPushButton#secondaryButton:hover {
             background: #E5E7EB;
@@ -1254,31 +1605,32 @@ def apply_style(app: QApplication) -> None:
             color: #9CA3AF;
         }
         QProgressBar {
-            height: 6px;
             background: #E5E7EB;
             border: none;
-            border-radius: 3px;
+            border-radius: 6px;
         }
         QProgressBar::chunk {
-            border-radius: 3px;
-            background: #111827;
+            border-radius: 6px;
+            background: #0F1828;
         }
         QPlainTextEdit#logBox {
             background: #FFFFFF;
-            color: #374151;
+            color: #344252;
             border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            border-radius: 8px;
             padding: 12px;
-            font-family: Consolas, "Microsoft YaHei UI";
+            font-family: "PingFang SC", "Microsoft YaHei UI", Consolas;
             font-size: 12px;
         }
         QFrame#resultPanel {
             background: #F9FAFB;
             border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            border-radius: 8px;
         }
         QLabel#resultText {
-            color: #374151;
+            color: #6C7583;
+            font-size: 12px;
+            font-weight: 500;
         }
         QScrollBar:vertical {
             background: #F9FAFB;
@@ -1322,7 +1674,7 @@ def apply_style(app: QApplication) -> None:
         }
         QToolTip {
             background: #FFFFFF;
-            color: #374151;
+            color: #344252;
             border: 1px solid #E5E7EB;
             padding: 8px 10px;
             border-radius: 8px;
@@ -1330,10 +1682,10 @@ def apply_style(app: QApplication) -> None:
         QFrame#floatingTip {
             background: #FFFFFF;
             border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            border-radius: 8px;
         }
         QLabel#floatingTipText {
-            color: #374151;
+            color: #344252;
             font-size: 12px;
             font-weight: 500;
         }

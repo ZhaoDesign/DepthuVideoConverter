@@ -92,7 +92,10 @@ Source: "..\..\assets\depth-video-converter.ico"; DestDir: "{app}\assets"; Flags
 Source: "..\..\assets\depth-video-converter.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-play.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-pause.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-volume.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-volume-muted.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-folder.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-chevron-down.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs
