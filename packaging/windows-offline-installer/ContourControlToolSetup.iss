@@ -105,6 +105,9 @@ Source: "..\..\assets\icon-volume-muted.png"; DestDir: "{app}\assets"; Flags: ig
 Source: "..\..\assets\icon-folder.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-chevron-down.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-more.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-chevron-right.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-check-dark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-fullscreen.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs

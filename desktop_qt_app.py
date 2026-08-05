@@ -83,8 +83,8 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 DATA_DIR = _configure_runtime()
 
 try:
-    from PySide6.QtCore import QPoint, QObject, QSize, Qt, QThread, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter  # noqa: E402
+    from PySide6.QtCore import QPoint, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
+    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter, QPixmap  # noqa: E402
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
     from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
@@ -163,7 +163,7 @@ def _load_icon(name: str) -> QIcon:
     return QIcon()
 
 
-def _set_icon(button: QPushButton, name: str, size: int = 20) -> None:
+def _set_icon(button: QPushButton, name: str, size: int = 16) -> None:
     button.setIcon(_load_icon(name))
     button.setIconSize(QSize(size, size))
 
@@ -257,33 +257,60 @@ class IconButton(QPushButton):
         _set_icon(self, icon_name, 16)
 
 
+class FigmaComboBox(QComboBox):
+    """Combo box whose popup geometry matches the Figma overlays."""
+
+    def showPopup(self) -> None:  # type: ignore[override]
+        super().showPopup()
+        QTimer.singleShot(0, self._position_popup)
+
+    def _position_popup(self) -> None:
+        popup = self.view().window()
+        if popup is None:
+            return
+        height = 4 + self.count() * 40
+        top_left = self.mapToGlobal(QPoint(0, -57))
+        popup.setGeometry(top_left.x(), top_left.y(), self.width(), height)
+        self.view().setFixedSize(self.width(), height)
+
+
 class ComboItemDelegate(QStyledItemDelegate):
     """Paint combo popup items with rounded hover and selected states."""
+
+    _check_pixmap: QPixmap | None = None
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # type: ignore[override]
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
-        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        combo = self.parent()
+        current_row = combo.currentIndex() if isinstance(combo, QComboBox) else -1
+        selected = bool(opt.state & QStyle.StateFlag.State_Selected) or index.row() == current_row
         hovered = bool(opt.state & QStyle.StateFlag.State_MouseOver)
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        bg_rect = opt.rect.adjusted(6, 3, -6, -3)
+        bg_rect = opt.rect
         if selected:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#F9FAFB"))
-            painter.drawRoundedRect(bg_rect, 7, 7)
+            painter.drawRoundedRect(bg_rect, 8, 8)
         elif hovered:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#F3F4F6"))
-            painter.drawRoundedRect(bg_rect, 7, 7)
+            painter.drawRoundedRect(bg_rect, 8, 8)
 
-        text_rect = opt.rect.adjusted(16, 0, -42, 0)
+        text_rect = opt.rect.adjusted(12, 0, -42, 0)
         painter.setPen(QColor("#344252"))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, opt.text)
         if selected:
-            painter.setPen(QColor("#0F1828"))
-            painter.drawText(opt.rect.adjusted(0, 0, -22, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "✓")
+            if ComboItemDelegate._check_pixmap is None:
+                ComboItemDelegate._check_pixmap = QPixmap(str(_asset_path("icon-check-dark.png")))
+            pixmap = ComboItemDelegate._check_pixmap
+            if pixmap is not None and not pixmap.isNull():
+                size = QSize(16, 16)
+                x = opt.rect.x() + opt.rect.width() - 28
+                y = opt.rect.center().y() - size.height() // 2
+                painter.drawPixmap(x, y, size.width(), size.height(), pixmap)
         painter.restore()
 
     def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:  # type: ignore[override]
@@ -368,7 +395,7 @@ class FigmaPopupItem(QPushButton):
         self.submenu = submenu
         self._more_icon = _load_icon("icon-more.png") if submenu is not None else QIcon()
         self.setObjectName("figmaPopupItem")
-        self.setFixedHeight(28)
+        self.setFixedHeight(25)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setProperty("active", active)
 
@@ -415,7 +442,7 @@ class FigmaPopupItem(QPushButton):
 
 
 class FigmaPopupMenu(QWidget):
-    def __init__(self, width: int = 126, parent: QWidget | None = None) -> None:
+    def __init__(self, width: int = 126, parent: QWidget | None = None, spacing: int = 4) -> None:
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setObjectName("figmaPopup")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -436,7 +463,7 @@ class FigmaPopupMenu(QWidget):
         self.panel.setGraphicsEffect(shadow)
         self.panel_layout = QVBoxLayout(self.panel)
         self.panel_layout.setContentsMargins(4, 4, 4, 4)
-        self.panel_layout.setSpacing(4)
+        self.panel_layout.setSpacing(spacing)
         root.addWidget(self.panel)
 
     def add_action_item(self, text: str, callback, active: bool = False) -> FigmaPopupItem:
@@ -556,8 +583,8 @@ class TopBar(QFrame):
         layout.addWidget(self._max_btn)
         layout.addWidget(self._close_btn)
 
-    def _menu(self, width: int = 126) -> FigmaPopupMenu:
-        menu = FigmaPopupMenu(width, self)
+    def _menu(self, width: int = 126, spacing: int = 4) -> FigmaPopupMenu:
+        menu = FigmaPopupMenu(width, self, spacing=spacing)
         self._menus.append(menu)
         return menu
 
@@ -573,7 +600,7 @@ class TopBar(QFrame):
         for current in self._menus:
             if current is not menu:
                 current.hide_chain()
-        menu.show_at(button.mapToGlobal(QPoint(0, button.height())))
+        menu.show_at(button.mapToGlobal(QPoint(8, button.height())))
 
     def _file_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
@@ -591,9 +618,9 @@ class TopBar(QFrame):
         return menu
 
     def _model_menu(self) -> FigmaPopupMenu:
-        menu = self._menu()
+        menu = self._menu(spacing=6)
         for name, cfg in MODEL_DEFS.items():
-            sub = self._menu()
+            sub = self._menu(spacing=6)
             for index, url in enumerate(cfg["urls"]):
                 source = "镜像" if index == 0 else ("官方" if index == 1 else "代理")
                 sub.add_action_item(f"{source}：{_short_path(url, 22)}", lambda u=url: QDesktopServices.openUrl(QUrl(u)), active=index == 0)
@@ -691,10 +718,11 @@ class VideoPlayer(QFrame):
         self._player.setVideoOutput(self._video)
         layout.addWidget(self._video_box, 1)
 
-        self._fullscreen_btn = QPushButton("⛶", self)
-        self._fullscreen_btn.setObjectName("fullscreenGlyph")
-        self._fullscreen_btn.setFixedSize(28, 28)
-        self._fullscreen_btn.move(INNER_WIDTH - 42, VIDEO_SURFACE_HEIGHT - 42)
+        self._fullscreen_btn = QPushButton(self)
+        self._fullscreen_btn.setObjectName("fullscreenButton")
+        self._fullscreen_btn.setFixedSize(24, 24)
+        self._fullscreen_btn.move(INNER_WIDTH - 32, VIDEO_SURFACE_HEIGHT - 32)
+        _set_icon(self._fullscreen_btn, "icon-fullscreen.png", 16)
         self._fullscreen_btn.hide()
 
         controls_widget = QFrame(self)
@@ -1147,7 +1175,7 @@ class ContourControlWindow(QMainWindow):
         settings_title.setFixedHeight(17)
         layout.addWidget(settings_title)
 
-        self.model_combo = QComboBox()
+        self.model_combo = FigmaComboBox()
         for key in MODEL_DEFS:
             self.model_combo.addItem(_model_display_label(key), key)
         _set_combo_data(self.model_combo, "Small (fastest, ~99 MB)")
@@ -1157,7 +1185,7 @@ class ContourControlWindow(QMainWindow):
         self.model_folder_btn.setFixedSize(32, 32)
         self.model_folder_btn.clicked.connect(self._open_model_dir)
 
-        self.resolution_combo = QComboBox()
+        self.resolution_combo = FigmaComboBox()
         for key in RESOLUTION_PRESETS:
             self.resolution_combo.addItem(key, key)
         _set_combo_data(self.resolution_combo, "Original")
@@ -1446,9 +1474,11 @@ class ContourControlWindow(QMainWindow):
 
 
 def apply_style(app: QApplication) -> None:
-    app.setFont(QFont("Microsoft YaHei UI", 10))
+    base_font = "PingFang SC" if sys.platform == "darwin" else "Microsoft YaHei UI"
+    app.setFont(QFont(base_font, 10))
     check_icon = str(_asset_path("checkmark.png")).replace("\\", "/")
     chevron_icon = str(_asset_path("icon-chevron-down.png")).replace("\\", "/")
+    right_arrow_icon = str(_asset_path("icon-chevron-right.png")).replace("\\", "/")
     app.setStyleSheet(
         """
         QWidget#root {
@@ -1543,9 +1573,9 @@ def apply_style(app: QApplication) -> None:
             font-size: 12px;
         }
         QMenu::item {
-            height: 28px;
-            min-width: 112px;
-            padding: 0 12px;
+            height: 25px;
+            min-width: 110px;
+            padding: 0 4px;
             border-radius: 4px;
         }
         QMenu::item:selected {
@@ -1555,7 +1585,13 @@ def apply_style(app: QApplication) -> None:
         QMenu::separator {
             height: 1px;
             background: #F3F4F6;
-            margin: 4px 0;
+            margin: 4px;
+        }
+        QMenu::right-arrow {
+            image: url(""" + right_arrow_icon + """);
+            width: 16px;
+            height: 16px;
+            padding-right: 0;
         }
         QFrame#panel {
             background: #F9FAFB;
@@ -1598,14 +1634,18 @@ def apply_style(app: QApplication) -> None:
             font-size: 14px;
             font-weight: 600;
         }
-        QPushButton#fullscreenGlyph {
-            background: transparent;
+        QPushButton#fullscreenButton {
+            background: rgba(0, 0, 0, 77);
             color: #FFFFFF;
             border: none;
-            border-radius: 0;
+            border-radius: 4px;
             padding: 0;
-            font-size: 17px;
-            font-weight: 400;
+        }
+        QPushButton#fullscreenButton:hover {
+            background: rgba(0, 0, 0, 96);
+        }
+        QPushButton#fullscreenButton:pressed {
+            background: rgba(0, 0, 0, 120);
         }
         QComboBox {
             background: #FFFFFF;
@@ -1640,7 +1680,7 @@ def apply_style(app: QApplication) -> None:
             selection-background-color: transparent;
             selection-color: #344252;
             outline: none;
-            padding: 6px;
+            padding: 4px;
         }
         QCheckBox {
             spacing: 10px;
