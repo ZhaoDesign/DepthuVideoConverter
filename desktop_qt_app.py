@@ -13,6 +13,8 @@ from pathlib import Path
 
 APP_TITLE = "视频深度控制图工具"
 APP_DIR_NAME = "DepthVideoConverter"
+APP_ICON_ICO = "contour-control-tool.ico"
+APP_ICON_PNG = "contour-control-tool.png"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 
 WINDOW_WIDTH = 1110
@@ -241,59 +243,18 @@ def _show_dialog(parent, title: str, message: str, kind: str = "info") -> None:
     dlg.exec()
 
 
-class FloatingToolTip(QFrame):
-    """Small rounded tooltip with a controlled shadow."""
-
-    def __init__(self, text: str) -> None:
-        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
-        self.setObjectName("floatingTip")
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(18)
-        shadow.setOffset(0, 6)
-        shadow.setColor(QColor(17, 24, 39, 48))
-        self.setGraphicsEffect(shadow)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        label = QLabel(text)
-        label.setObjectName("floatingTipText")
-        label.setWordWrap(False)
-        layout.addWidget(label)
-
-
 class IconButton(QPushButton):
-    """Icon-only button with consistent size and custom tooltip styling."""
+    """Icon-only button with consistent Figma sizing and no hover text."""
 
-    def __init__(self, icon_name: str, tooltip_text: str, parent=None, size: int = 36) -> None:
+    def __init__(self, icon_name: str, parent=None, size: int = 36) -> None:
         super().__init__(parent)
-        self._tip = FloatingToolTip(tooltip_text)
         self.setObjectName("iconButton")
         self.setFixedSize(size, size)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        _set_icon(self, icon_name)
+        _set_icon(self, icon_name, 16)
 
     def set_icon_name(self, icon_name: str) -> None:
-        _set_icon(self, icon_name)
-
-    def enterEvent(self, event) -> None:  # type: ignore[override]
-        self._tip.adjustSize()
-        pos = self.mapToGlobal(QPoint((self.width() - self._tip.width()) // 2, self.height() + 8))
-        screen = QApplication.screenAt(pos) or QApplication.primaryScreen()
-        if screen is not None:
-            available = screen.availableGeometry()
-            if pos.x() + self._tip.width() > available.right():
-                pos.setX(available.right() - self._tip.width() - 8)
-            if pos.x() < available.left():
-                pos.setX(available.left() + 8)
-        self._tip.move(pos)
-        self._tip.show()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event) -> None:  # type: ignore[override]
-        self._tip.hide()
-        super().leaveEvent(event)
+        _set_icon(self, icon_name, 16)
 
 
 class ComboItemDelegate(QStyledItemDelegate):
@@ -340,7 +301,9 @@ def _configure_combo(combo: QComboBox) -> None:
     combo.setMaxVisibleItems(8)
     combo.setFixedHeight(36)
     combo.setCursor(Qt.CursorShape.PointingHandCursor)
-    combo.view().window().setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+    combo.view().window().setWindowFlags(
+        Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
+    )
 
 
 def _model_display_label(model_key: str) -> str:
@@ -372,7 +335,7 @@ class StaticTransportControls(QFrame):
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(12)
 
-        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self, size=32)
+        self._play_btn = IconButton("icon-play.png", self, size=32)
         controls.addWidget(self._play_btn)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
@@ -387,7 +350,7 @@ class StaticTransportControls(QFrame):
         self._time_label.setFixedWidth(64)
         controls.addWidget(self._time_label)
 
-        self._mute_btn = IconButton("icon-volume.png", "开启 / 关闭声音", self, size=32)
+        self._mute_btn = IconButton("icon-volume.png", self, size=32)
         controls.addWidget(self._mute_btn)
 
         self._volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -396,6 +359,170 @@ class StaticTransportControls(QFrame):
         self._volume_slider.setValue(80)
         self._volume_slider.setFixedWidth(56)
         controls.addWidget(self._volume_slider)
+
+
+class FigmaPopupItem(QPushButton):
+    def __init__(self, text: str, callback=None, submenu: "FigmaPopupMenu | None" = None, active: bool = False) -> None:
+        super().__init__(text)
+        self.callback = callback
+        self.submenu = submenu
+        self._more_icon = _load_icon("icon-more.png") if submenu is not None else QIcon()
+        self.setObjectName("figmaPopupItem")
+        self.setFixedHeight(28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setProperty("active", active)
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        parent_menu = self._parent_menu()
+        if parent_menu is not None:
+            parent_menu.set_active_item(self)
+        if self.submenu is not None:
+            self.submenu.show_at(self.mapToGlobal(QPoint(self.width() + 4, 0)))
+        super().enterEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton and self.callback is not None:
+            menu = self._parent_menu()
+            if menu is not None:
+                menu.close_chain()
+            self.callback()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        active = bool(self.property("active"))
+        if active:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#F9FAFB"))
+            painter.drawRoundedRect(self.rect(), 4, 4)
+        painter.setPen(QColor("#6C7583"))
+        painter.setFont(self.font())
+        painter.drawText(self.rect().adjusted(8, 0, -28, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.text())
+        if not self._more_icon.isNull():
+            pix = self._more_icon.pixmap(QSize(16, 16))
+            painter.drawPixmap(self.width() - 24, (self.height() - 16) // 2, pix)
+
+    def _parent_menu(self) -> "FigmaPopupMenu | None":
+        widget = self.parentWidget()
+        while widget is not None:
+            if isinstance(widget, FigmaPopupMenu):
+                return widget
+            widget = widget.parentWidget()
+        return None
+
+
+class FigmaPopupMenu(QWidget):
+    def __init__(self, width: int = 126, parent: QWidget | None = None) -> None:
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setObjectName("figmaPopup")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._items: list[FigmaPopupItem] = []
+        self._submenus: list[FigmaPopupMenu] = []
+        self._active_item: FigmaPopupItem | None = None
+        self._panel_width = width
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        self.panel = QFrame(self)
+        self.panel.setObjectName("figmaPopupPanel")
+        self.panel.setFixedWidth(width)
+        shadow = QGraphicsDropShadowEffect(self.panel)
+        shadow.setBlurRadius(8)
+        shadow.setOffset(0, 0)
+        shadow.setColor(QColor(0, 0, 0, 26))
+        self.panel.setGraphicsEffect(shadow)
+        self.panel_layout = QVBoxLayout(self.panel)
+        self.panel_layout.setContentsMargins(4, 4, 4, 4)
+        self.panel_layout.setSpacing(4)
+        root.addWidget(self.panel)
+
+    def add_action_item(self, text: str, callback, active: bool = False) -> FigmaPopupItem:
+        item = FigmaPopupItem(text, callback=callback, active=active)
+        self._add_item(item)
+        return item
+
+    def add_submenu_item(self, text: str, submenu: "FigmaPopupMenu", active: bool = False) -> FigmaPopupItem:
+        item = FigmaPopupItem(text, submenu=submenu, active=active)
+        self._submenus.append(submenu)
+        self._add_item(item)
+        return item
+
+    def add_separator(self) -> None:
+        line = QFrame(self.panel)
+        line.setObjectName("figmaPopupSeparator")
+        line.setFixedHeight(1)
+        self.panel_layout.addWidget(line)
+
+    def _add_item(self, item: FigmaPopupItem) -> None:
+        item.setParent(self.panel)
+        item.setFixedWidth(self._panel_width - 8)
+        self._items.append(item)
+        self.panel_layout.addWidget(item)
+        if item.property("active"):
+            self._active_item = item
+
+    def set_active_item(self, item: FigmaPopupItem) -> None:
+        for current in self._items:
+            current.setProperty("active", current is item)
+            current.style().unpolish(current)
+            current.style().polish(current)
+            current.update()
+            if current is not item and current.submenu is not None:
+                current.submenu.hide_chain()
+        self._active_item = item
+
+    def show_at(self, panel_top_left: QPoint) -> None:
+        self.adjustSize()
+        self.move(panel_top_left - QPoint(8, 8))
+        self.show()
+        self.raise_()
+
+    def hide_chain(self) -> None:
+        for submenu in self._submenus:
+            submenu.hide_chain()
+        self.hide()
+
+    def close_chain(self) -> None:
+        for submenu in self._submenus:
+            submenu.close_chain()
+        self.close()
+
+
+class WindowControlButton(QPushButton):
+    def __init__(self, control: str, parent=None) -> None:
+        super().__init__(parent)
+        self.control = control
+        self.setObjectName("windowControlButton")
+        self.setFixedSize(46, TITLE_BAR_HEIGHT)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if self.underMouse():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#F9FAFB"))
+            painter.drawRect(self.rect())
+        painter.setPen(QColor("#000000"))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self.control == "min":
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#000000"))
+            painter.drawRoundedRect(17, 18, 12, 1, 0.5, 0.5)
+        elif self.control == "max":
+            pen = painter.pen()
+            pen.setWidthF(0.8)
+            painter.setPen(pen)
+            painter.drawRect(17, 12, 11, 11)
+        else:
+            pen = painter.pen()
+            pen.setWidthF(0.8)
+            painter.setPen(pen)
+            painter.drawLine(17, 12, 28, 23)
+            painter.drawLine(28, 12, 17, 23)
 
 
 class TopBar(QFrame):
@@ -412,15 +539,16 @@ class TopBar(QFrame):
         layout.setContentsMargins(16, 0, 0, 0)
         layout.setSpacing(8)
 
+        self._menus: list[FigmaPopupMenu] = []
         layout.addWidget(self._menu_button("文件", self._file_menu()))
         layout.addWidget(self._menu_button("设置", self._settings_menu()))
         layout.addWidget(self._menu_button("模型", self._model_menu()))
         layout.addWidget(self._menu_button("帮助", self._help_menu()))
         layout.addStretch(1)
 
-        self._min_btn = self._window_button("−", "最小化")
-        self._max_btn = self._window_button("□", "最大化")
-        self._close_btn = self._window_button("×", "关闭", role="close")
+        self._min_btn = WindowControlButton("min", self)
+        self._max_btn = WindowControlButton("max", self)
+        self._close_btn = WindowControlButton("close", self)
         self._min_btn.clicked.connect(window.showMinimized)
         self._max_btn.clicked.connect(self._toggle_maximized)
         self._close_btn.clicked.connect(window.close)
@@ -428,81 +556,62 @@ class TopBar(QFrame):
         layout.addWidget(self._max_btn)
         layout.addWidget(self._close_btn)
 
-    def _menu(self) -> QMenu:
-        menu = QMenu(self)
-        menu.setObjectName("figmaMenu")
+    def _menu(self, width: int = 126) -> FigmaPopupMenu:
+        menu = FigmaPopupMenu(width, self)
+        self._menus.append(menu)
         return menu
 
-    def _menu_button(self, text: str, menu: QMenu) -> QPushButton:
+    def _menu_button(self, text: str, menu: FigmaPopupMenu) -> QPushButton:
         button = QPushButton(text, self)
         button.setObjectName("topMenuButton")
         button.setFixedSize(40, 28)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.clicked.connect(lambda _checked=False, b=button, m=menu: m.popup(b.mapToGlobal(QPoint(0, b.height()))))
+        button.clicked.connect(lambda _checked=False, b=button, m=menu: self._show_menu(b, m))
         return button
 
-    def _window_button(self, text: str, tooltip: str, role: str = "") -> QPushButton:
-        button = QPushButton(text, self)
-        button.setObjectName("windowControlButton")
-        if role:
-            button.setProperty("role", role)
-        button.setToolTip(tooltip)
-        button.setFixedSize(46, TITLE_BAR_HEIGHT)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        return button
+    def _show_menu(self, button: QPushButton, menu: FigmaPopupMenu) -> None:
+        for current in self._menus:
+            if current is not menu:
+                current.hide_chain()
+        menu.show_at(button.mapToGlobal(QPoint(0, button.height())))
 
-    def _file_menu(self) -> QMenu:
+    def _file_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
-        open_act = QAction("打开视频", self)
-        open_act.triggered.connect(self._window._choose_input)
-        menu.addAction(open_act)
-        menu.addSeparator()
-        quit_act = QAction("退出", self)
-        quit_act.triggered.connect(self._window.close)
-        menu.addAction(quit_act)
+        menu.add_action_item("打开视频", self._window._choose_input, active=True)
+        menu.add_separator()
+        menu.add_action_item("退出", self._window.close)
         return menu
 
-    def _settings_menu(self) -> QMenu:
+    def _settings_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
-        model_dir_act = QAction("模型目录", self)
-        model_dir_act.triggered.connect(self._window._change_model_dir)
-        menu.addAction(model_dir_act)
-        output_dir_act = QAction("输出目录", self)
-        output_dir_act.triggered.connect(self._window._change_output_dir)
-        menu.addAction(output_dir_act)
-        menu.addSeparator()
-        uninstall_act = QAction("卸载应用", self)
-        uninstall_act.triggered.connect(self._window._uninstall_app)
-        menu.addAction(uninstall_act)
+        menu.add_action_item("模型目录", self._window._change_model_dir, active=True)
+        menu.add_action_item("输出目录", self._window._change_output_dir)
+        menu.add_separator()
+        menu.add_action_item("卸载应用", self._window._uninstall_app)
         return menu
 
-    def _model_menu(self) -> QMenu:
+    def _model_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
         for name, cfg in MODEL_DEFS.items():
             sub = self._menu()
-            sub.setTitle(name.split(" (")[0])
             for index, url in enumerate(cfg["urls"]):
                 source = "镜像" if index == 0 else ("官方" if index == 1 else "代理")
-                act = QAction(f"{source}：{_short_path(url, 24)}", self)
-                act.triggered.connect(lambda _checked=False, u=url: QDesktopServices.openUrl(QUrl(u)))
-                sub.addAction(act)
-            menu.addMenu(sub)
+                sub.add_action_item(f"{source}：{_short_path(url, 22)}", lambda u=url: QDesktopServices.openUrl(QUrl(u)), active=index == 0)
+            menu.add_submenu_item(name.split(" (")[0], sub, active=name.startswith("Small"))
         return menu
 
-    def _help_menu(self) -> QMenu:
+    def _help_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
-        about_act = QAction("关于", self)
-        about_act.triggered.connect(
+        menu.add_action_item(
+            "关于",
             lambda: _show_dialog(
-                self._window,
-                "关于",
-                f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool",
-            )
+                    self._window,
+                    "关于",
+                    f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool",
+                ),
+            active=True,
         )
-        menu.addAction(about_act)
-        github_act = QAction("Github", self)
-        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
-        menu.addAction(github_act)
+        menu.add_action_item("Github", lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
         return menu
 
     def _toggle_maximized(self) -> None:
@@ -594,7 +703,7 @@ class VideoPlayer(QFrame):
         controls = QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(12)
-        self._play_btn = IconButton("icon-play.png", "播放 / 暂停", self, size=32)
+        self._play_btn = IconButton("icon-play.png", self, size=32)
         self._play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self._play_btn)
 
@@ -611,7 +720,7 @@ class VideoPlayer(QFrame):
         self._time_label.setFixedWidth(64)
         controls.addWidget(self._time_label)
 
-        self._mute_btn = IconButton("icon-volume.png", "开启 / 关闭声音", self, size=32)
+        self._mute_btn = IconButton("icon-volume.png", self, size=32)
         self._mute_btn.clicked.connect(self._toggle_mute)
         controls.addWidget(self._mute_btn)
 
@@ -858,7 +967,7 @@ class ContourControlWindow(QMainWindow):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setMinimumSize(QSize(WINDOW_WIDTH, WINDOW_HEIGHT))
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        icon_path = _asset_path("depth-video-converter.ico")
+        icon_path = _asset_path(APP_ICON_ICO)
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -1044,7 +1153,7 @@ class ContourControlWindow(QMainWindow):
         _set_combo_data(self.model_combo, "Small (fastest, ~99 MB)")
         _configure_combo(self.model_combo)
 
-        self.model_folder_btn = IconButton("icon-folder.png", "打开模型目录", self)
+        self.model_folder_btn = IconButton("icon-folder.png", self)
         self.model_folder_btn.setFixedSize(32, 32)
         self.model_folder_btn.clicked.connect(self._open_model_dir)
 
@@ -1098,7 +1207,6 @@ class ContourControlWindow(QMainWindow):
         self.invert_check = QCheckBox("黑白反转")
         self.invert_check.setFixedHeight(20)
         self.preserve_audio_check = QCheckBox("黑白反转")
-        self.preserve_audio_check.setToolTip("保留原始音频")
         self.preserve_audio_check.setFixedHeight(20)
         self.preserve_audio_check.setChecked(True)
         layout.addWidget(self.invert_check)
@@ -1403,6 +1511,28 @@ def apply_style(app: QApplication) -> None:
             background: #E81123;
             color: #FFFFFF;
         }
+        QWidget#figmaPopup {
+            background: transparent;
+        }
+        QFrame#figmaPopupPanel {
+            background: #FFFFFF;
+            border: none;
+            border-radius: 4px;
+        }
+        QPushButton#figmaPopupItem {
+            background: transparent;
+            color: #6C7583;
+            border: none;
+            border-radius: 4px;
+            padding: 0;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 400;
+        }
+        QFrame#figmaPopupSeparator {
+            background: #ECECEC;
+            border: none;
+        }
         QMenu {
             background: #FFFFFF;
             color: #6C7583;
@@ -1671,23 +1801,6 @@ def apply_style(app: QApplication) -> None:
         }
         QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
             background: none;
-        }
-        QToolTip {
-            background: #FFFFFF;
-            color: #344252;
-            border: 1px solid #E5E7EB;
-            padding: 8px 10px;
-            border-radius: 8px;
-        }
-        QFrame#floatingTip {
-            background: #FFFFFF;
-            border: 1px solid #E5E7EB;
-            border-radius: 8px;
-        }
-        QLabel#floatingTipText {
-            color: #344252;
-            font-size: 12px;
-            font-weight: 500;
         }
         """
     )

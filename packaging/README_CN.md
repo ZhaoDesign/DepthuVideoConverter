@@ -33,7 +33,7 @@ dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
 - 后台安装运行环境，不显示 PowerShell 窗口。
 - 启动后是 PySide6 原生桌面窗口，不需要浏览器。
 - 桌面和开始菜单都有启动快捷方式。
-- 桌面和开始菜单都有“卸载 视频深度控制图工具”快捷方式。
+- 不创建桌面或开始菜单卸载快捷方式；卸载使用 Windows“设置 > 应用”或控制面板。
 - 安装完成后不要求重启。
 
 详细交接和验证记录见：

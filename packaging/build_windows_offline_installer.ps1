@@ -4,7 +4,8 @@
 
 param(
     [switch]$SkipRuntimeBuild,
-    [switch]$Clean
+    [switch]$Clean,
+    [string]$AppVersion = "0.1.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,11 +129,11 @@ Write-Host ("Runtime size: {0:N0} MB (uncompressed)" -f $runtimeSize)
 
 # --- Compile installer ---
 Write-Host "Compiling Inno Setup installer..."
-$env:APP_VERSION = "0.1.0"
+$env:APP_VERSION = $AppVersion
 & $Iscc $IssFile
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
-$outputExe = Join-Path $ProjectRoot "dist\windows-installer\ContourControlTool-Windows-x64-Setup.exe"
+$outputExe = Join-Path $ProjectRoot "dist\windows-installer\ContourControlTool-Windows-x64-OfflineSetup.exe"
 if (Test-Path $outputExe) {
     $exeSize = (Get-Item $outputExe).Length / 1MB
     Write-Host ""

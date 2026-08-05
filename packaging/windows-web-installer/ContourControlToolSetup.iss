@@ -20,10 +20,10 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
-SetupIconFile=..\..\assets\depth-video-converter.ico
+SetupIconFile=..\..\assets\contour-control-tool.ico
 WizardImageFile=..\..\assets\installer-banner.bmp
 WizardSmallImageFile=..\..\assets\installer-small.bmp
-UninstallDisplayIcon={app}\assets\depth-video-converter.ico
+UninstallDisplayIcon={app}\assets\contour-control-tool.ico
 OutputDir=..\..\dist\windows-installer
 OutputBaseFilename=ContourControlTool-Windows-x64-WebSetup
 Compression=lzma2/ultra64
@@ -53,7 +53,7 @@ ReadyLabel2a=点击“安装”开始复制文件、创建快捷方式并安装�
 InstallingLabel=正在安装 {#MyAppName}，请稍候。
 FinishedHeadingLabel=完成 {#MyAppName} 安装向导
 FinishedLabelNoIcons={#MyAppName} 已安装完成。
-FinishedLabel={#MyAppName} 已安装完成。可通过桌面或开始菜单快捷方式启动，也可以使用卸载快捷方式移除。
+FinishedLabel={#MyAppName} 已安装完成。可通过桌面或开始菜单快捷方式启动。
 ButtonNext=下一步(&N) >
 ButtonBack=< 上一步(&B)
 ButtonInstall=安装(&I)
@@ -90,12 +90,15 @@ Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README_CN.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\assets\depth-video-converter.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\depth-video-converter.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\contour-control-tool.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\contour-control-tool.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-play.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-pause.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-volume.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-volume-muted.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-folder.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-chevron-down.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-more.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -104,18 +107,20 @@ Source: "runtime-requirements-cpu.txt"; DestDir: "{app}\installer"; Flags: ignor
 Source: "verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"
-Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"; Tasks: desktopicon
-Name: "{autodesktop}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
+Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install_runtime.ps1"" -InstallDir ""{app}"""; StatusMsg: "正在联网下载并安装运行环境，首次安装可能需要几分钟..."; Flags: waituntilterminated runhidden
 Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked; Check: RuntimeAlreadyInstalled
 
 [InstallDelete]
+Type: files; Name: "{group}\{#MyAppName}.lnk"
+Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
 Type: files; Name: "{group}\Uninstall {#MyAppName}.lnk"
 Type: files; Name: "{autodesktop}\Uninstall {#MyAppName}.lnk"
+Type: files; Name: "{group}\卸载 {#MyAppName}.lnk"
+Type: files; Name: "{autodesktop}\卸载 {#MyAppName}.lnk"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\app"

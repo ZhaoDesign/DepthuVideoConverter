@@ -21,10 +21,10 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
-SetupIconFile=..\..\assets\depth-video-converter.ico
+SetupIconFile=..\..\assets\contour-control-tool.ico
 WizardImageFile=..\..\assets\installer-banner.bmp
 WizardSmallImageFile=..\..\assets\installer-small.bmp
-UninstallDisplayIcon={app}\assets\depth-video-converter.ico
+UninstallDisplayIcon={app}\assets\contour-control-tool.ico
 OutputDir=..\..\dist\windows-installer
 OutputBaseFilename=ContourControlTool-Windows-x64-OfflineSetup
 Compression=lzma2/fast
@@ -54,7 +54,7 @@ ReadyLabel2a=点击"安装"开始安装。
 InstallingLabel=正在安装 {#MyAppName}，请稍候。
 FinishedHeadingLabel=完成 {#MyAppName} 安装向导
 FinishedLabelNoIcons={#MyAppName} 已安装完成。
-FinishedLabel={#MyAppName} 已安装完成。可通过桌面或开始菜单快捷方式启动，也可以使用卸载快捷方式移除。
+FinishedLabel={#MyAppName} 已安装完成。可通过桌面或开始菜单快捷方式启动。
 ButtonNext=下一步(&N) >
 ButtonBack=< 上一步(&B)
 ButtonInstall=安装(&I)
@@ -84,11 +84,11 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 ; Pre-built Python runtime (bundled offline)
-Source: "..\..\build\runtime\*"; DestDir: "{localappdata}\CCT\rt311cpu"; Flags: ignoreversion recursesubdirs createallsubdirs; BeforeInstall: StopExistingApp
+Source: "..\..\build\runtime\*"; DestDir: "{localappdata}\CCT\rt311cpu"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: ShouldInstallRuntime
 ; Bundled ONNX model (Small) — no download needed on first run
 Source: "..\..\build\models\depth_anything_v2_vits.onnx"; DestDir: "{localappdata}\DepthVideoConverter\models"; Flags: ignoreversion
 ; Application source
-Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
 Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\depth_video_converter.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "..\..\depth_video_cli.py"; DestDir: "{app}\app"; Flags: ignoreversion
@@ -96,9 +96,15 @@ Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README_CN.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\assets\depth-video-converter.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\depth-video-converter.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\contour-control-tool.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\contour-control-tool.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-play.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-pause.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-volume.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-volume-muted.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-folder.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-chevron-down.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\..\assets\icon-more.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -106,17 +112,19 @@ Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Fla
 Source: "..\windows-web-installer\verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"
-Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\depth-video-converter.ico"; Tasks: desktopicon
-Name: "{autodesktop}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{uninstallexe}"
+Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
 
 [InstallDelete]
+Type: files; Name: "{group}\{#MyAppName}.lnk"
+Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
 Type: files; Name: "{group}\Uninstall {#MyAppName}.lnk"
 Type: files; Name: "{autodesktop}\Uninstall {#MyAppName}.lnk"
+Type: files; Name: "{group}\卸载 {#MyAppName}.lnk"
+Type: files; Name: "{autodesktop}\卸载 {#MyAppName}.lnk"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\app"
@@ -140,6 +148,17 @@ begin
     '}; ' +
     'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }"';
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PowerShellArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function RuntimeAlreadyInstalled: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\pythonw.exe')) and
+            FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok'));
+end;
+
+function ShouldInstallRuntime: Boolean;
+begin
+  Result := not RuntimeAlreadyInstalled;
 end;
 
 function VCRedistInstalled: Boolean;
