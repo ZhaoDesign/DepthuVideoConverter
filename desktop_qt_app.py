@@ -83,8 +83,8 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 DATA_DIR = _configure_runtime()
 
 try:
-    from PySide6.QtCore import QPoint, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QPainter, QPixmap  # noqa: E402
+    from PySide6.QtCore import QPoint, QRectF, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
+    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap  # noqa: E402
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
     from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
@@ -94,7 +94,6 @@ try:
         QDialog,
         QFileDialog,
         QFrame,
-        QGraphicsDropShadowEffect,
         QGridLayout,
         QHBoxLayout,
         QLabel,
@@ -398,6 +397,7 @@ class FigmaPopupItem(QPushButton):
         self.setFixedHeight(25)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setProperty("active", active)
+        self.setAutoFillBackground(False)
 
     def enterEvent(self, event) -> None:  # type: ignore[override]
         parent_menu = self._parent_menu()
@@ -442,29 +442,95 @@ class FigmaPopupItem(QPushButton):
 
 
 class FigmaPopupMenu(QWidget):
+    SHADOW_SPREAD = 8
+    CORNER_RADIUS = 8
+
     def __init__(self, width: int = 126, parent: QWidget | None = None, spacing: int = 4) -> None:
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setObjectName("figmaPopup")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAutoFillBackground(False)
         self._items: list[FigmaPopupItem] = []
         self._submenus: list[FigmaPopupMenu] = []
         self._active_item: FigmaPopupItem | None = None
         self._panel_width = width
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 8, 8, 8)
+        root.setContentsMargins(
+            self.SHADOW_SPREAD, self.SHADOW_SPREAD,
+            self.SHADOW_SPREAD, self.SHADOW_SPREAD,
+        )
         self.panel = QFrame(self)
         self.panel.setObjectName("figmaPopupPanel")
+        self.panel.setFrameShape(QFrame.Shape.NoFrame)
+        self.panel.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.panel.setAutoFillBackground(False)
         self.panel.setFixedWidth(width)
-        shadow = QGraphicsDropShadowEffect(self.panel)
-        shadow.setBlurRadius(8)
-        shadow.setOffset(0, 0)
-        shadow.setColor(QColor(0, 0, 0, 26))
-        self.panel.setGraphicsEffect(shadow)
         self.panel_layout = QVBoxLayout(self.panel)
         self.panel_layout.setContentsMargins(4, 4, 4, 4)
         self.panel_layout.setSpacing(spacing)
         root.addWidget(self.panel)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        spread = float(self.SHADOW_SPREAD)
+        radius = float(self.CORNER_RADIUS)
+
+        inner = rect.adjusted(spread, spread, -spread, -spread)
+        shadow_img = self._render_shadow(rect, inner, radius, spread)
+
+        clip = QPainterPath()
+        clip.addRoundedRect(rect, radius + spread, radius + spread)
+        clip.addRoundedRect(inner, radius, radius)
+        clip.setFillRule(Qt.FillRule.OddEvenFill)
+        painter.setClipPath(clip)
+
+        painter.setOpacity(0.30)
+        painter.drawImage(rect.topLeft(), shadow_img)
+        painter.setOpacity(1.0)
+        painter.setClipping(False)
+
+        bg_path = QPainterPath()
+        bg_path.addRoundedRect(inner, radius, radius)
+        painter.fillPath(bg_path, QColor("#FFFFFF"))
+
+    @staticmethod
+    def _render_shadow(
+        outer: QRectF, inner: QRectF, radius: float, spread: float
+    ) -> QImage:
+        w = int(outer.width())
+        h = int(outer.height())
+        img = QImage(w, h, QImage.Format.Format_ARGB32)
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        path = QPainterPath()
+        path.addRoundedRect(inner, radius, radius)
+        p.fillPath(path, QColor(0, 0, 0, 255))
+        p.end()
+
+        src = img
+        for _ in range(3):
+            tmp = QImage(img.size(), QImage.Format.Format_ARGB32)
+            tmp.fill(Qt.GlobalColor.transparent)
+            p = QPainter(tmp)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            p.drawImage(QPoint(2, 0), src)
+            p.drawImage(QPoint(-2, 0), src)
+            p.drawImage(QPoint(0, 2), src)
+            p.drawImage(QPoint(0, -2), src)
+            p.drawImage(QPoint(1, 1), src)
+            p.drawImage(QPoint(-1, -1), src)
+            p.drawImage(QPoint(1, -1), src)
+            p.drawImage(QPoint(-1, 1), src)
+            p.drawImage(QPoint(0, 0), src)
+            p.end()
+            src = tmp
+
+        return src
 
     def add_action_item(self, text: str, callback, active: bool = False) -> FigmaPopupItem:
         item = FigmaPopupItem(text, callback=callback, active=active)
@@ -480,6 +546,7 @@ class FigmaPopupMenu(QWidget):
     def add_separator(self) -> None:
         line = QFrame(self.panel)
         line.setObjectName("figmaPopupSeparator")
+        line.setFrameShape(QFrame.Shape.NoFrame)
         line.setFixedHeight(1)
         self.panel_layout.addWidget(line)
 
@@ -503,7 +570,7 @@ class FigmaPopupMenu(QWidget):
 
     def show_at(self, panel_top_left: QPoint) -> None:
         self.adjustSize()
-        self.move(panel_top_left - QPoint(8, 8))
+        self.move(panel_top_left - QPoint(self.SHADOW_SPREAD, self.SHADOW_SPREAD))
         self.show()
         self.raise_()
 
@@ -1545,9 +1612,9 @@ def apply_style(app: QApplication) -> None:
             background: transparent;
         }
         QFrame#figmaPopupPanel {
-            background: #FFFFFF;
+            background: transparent;
             border: none;
-            border-radius: 4px;
+            border-radius: 0;
         }
         QPushButton#figmaPopupItem {
             background: transparent;

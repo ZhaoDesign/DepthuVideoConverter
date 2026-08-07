@@ -21,3 +21,7 @@ models/*.pth
 
 # OMC
 .omc/
+
+# Figma cache and local logs
+.figma-cache/
+*.log
