@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Desktop entry point for the packaged Contour Control Tool app."""
+"""Desktop entry point for the packaged DepthuVideoConverter app."""
 
 from __future__ import annotations
 
@@ -18,21 +18,32 @@ import webbrowser
 from pathlib import Path
 
 
-APP_TITLE = "视频深度控制图工具"
-LEGACY_APP_TITLE = "深度视频转换器"
-APP_DIR_NAME = "DepthVideoConverter"
+APP_TITLE = "DepthuVideoConverter"
+LEGACY_APP_TITLES = {"视频深度控制图工具", "深度视频转换器"}
+APP_DIR_NAME = "DepthuVideoConverter"
+LEGACY_APP_DIR_NAMES = ("DepthVideoConverter",)
 DEFAULT_PORT = 7860
 PORT_SCAN_COUNT = 50
 
 
 def _user_data_dir() -> Path:
+    override = os.environ.get("DEPTH_APP_DATA_DIR")
+    if override:
+        return Path(override).expanduser()
     if sys.platform == "darwin":
         root = Path.home() / "Library" / "Application Support"
     elif os.name == "nt":
         root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return root / APP_DIR_NAME
+    preferred = root / APP_DIR_NAME
+    if preferred.exists():
+        return preferred
+    for legacy_name in LEGACY_APP_DIR_NAMES:
+        legacy = root / legacy_name
+        if legacy.exists():
+            return legacy
+    return preferred
 
 
 def _configure_runtime(data_dir: Path) -> None:
@@ -124,7 +135,7 @@ def _show_error(message: str) -> None:
     if sys.platform == "darwin":
         script = (
             'on run argv\n'
-            'display alert "视频深度控制图工具无法启动" message (item 1 of argv) as critical\n'
+            'display alert "DepthuVideoConverter 无法启动" message (item 1 of argv) as critical\n'
             'end run'
         )
         subprocess.run(["osascript", "-e", script, message], check=False)
@@ -311,7 +322,7 @@ def _show_macos_controller_window(port: int, owns_server: bool) -> bool:
         content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
         window.setContentView_(content)
 
-        title = NSTextField.labelWithString_("视频深度控制图工具正在运行")
+        title = NSTextField.labelWithString_("DepthuVideoConverter 正在运行")
         title.setFrame_(NSMakeRect(24, 158, 392, 26))
         title.setFont_(NSFont.boldSystemFontOfSize_(16))
         title.setTextColor_(NSColor.labelColor())
@@ -380,7 +391,7 @@ def _show_tk_controller_window(port: int, owns_server: bool) -> bool:
 
     title = tk.Label(
         frame,
-        text="视频深度控制图工具正在运行",
+        text="DepthuVideoConverter 正在运行",
         bg="#F5F6F7",
         fg="#1F2937",
         font=("Helvetica", 16, "bold"),
@@ -467,7 +478,7 @@ def main() -> None:
 
     requested_port = int(os.environ.get("DEPTH_PORT", str(DEFAULT_PORT)))
     for port in range(requested_port, requested_port + PORT_SCAN_COUNT):
-        if _server_title(port) in {APP_TITLE, LEGACY_APP_TITLE}:
+        if _server_title(port) in {APP_TITLE, *LEGACY_APP_TITLES}:
             _open_interface(port)
             _show_controller_window(port, owns_server=False)
             return

@@ -2,7 +2,7 @@
 #include <wchar.h>
 
 static void show_error(const wchar_t *message) {
-    MessageBoxW(NULL, message, L"视频深度控制图工具", MB_OK | MB_ICONERROR);
+    MessageBoxW(NULL, message, L"DepthuVideoConverter", MB_OK | MB_ICONERROR);
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command_line, int show_command) {

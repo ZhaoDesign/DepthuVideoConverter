@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Contour Control Tool — Convert video to depth-map control video using Depth Anything V2.
+DepthuVideoConverter — Convert video to depth-map control video using Depth Anything V2.
 
 Features:
   - Gradio Web UI with MP4 / MOV upload
@@ -22,7 +22,6 @@ import sys
 import threading
 
 import gradio as gr
-import torch
 
 # Shared core library — all domain logic lives here
 from depth_converter import (
@@ -33,7 +32,9 @@ from depth_converter import (
     process_video,
 )
 
-APP_TITLE = "视频深度控制图工具"
+APP_TITLE = "DepthuVideoConverter"
+MODEL_LABELS = list(MODEL_DEFS.keys())
+DEFAULT_MODEL_LABEL = MODEL_LABELS[0]
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +55,16 @@ CLOSE_TAB_CONFIRM_HEAD = """
 
 def _is_desktop_mode() -> bool:
     return os.environ.get("DEPTH_DESKTOP_MODE") == "1"
+
+
+def _torch_version() -> str:
+    try:
+        import importlib
+
+        torch = importlib.import_module("torch")
+        return torch.__version__
+    except Exception:
+        return "未安装"
 
 def _process_video_for_gradio(
     input_video_path: str,
@@ -131,7 +142,7 @@ def create_ui() -> gr.Blocks:
 
     with gr.Blocks(css=CSS, title=APP_TITLE, head=head) as demo:
         gr.Markdown(
-            """# 视频深度控制图工具
+            """# DepthuVideoConverter
 使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)，
 将 MP4 / MOV 视频转换为**灰度深度/轮廓控制视频**，方便作为 AI 视频生成、动画参考和空间运动控制素材。
             """
@@ -147,8 +158,8 @@ def create_ui() -> gr.Blocks:
                 )
 
                 model_size = gr.Dropdown(
-                    choices=list(MODEL_DEFS.keys()),
-                    value="Small (fastest, ~95 MB)",
+                    choices=MODEL_LABELS,
+                    value=DEFAULT_MODEL_LABEL,
                     label="模型大小",
                     info="模型越大，深度图质量越高，但处理速度越慢。",
                 )
@@ -257,7 +268,7 @@ def main() -> None:
         print(f"    {status}  {label}")
 
     print(f"  Python          : {sys.version.split()[0]}")
-    print(f"  PyTorch         : {torch.__version__}")
+    print(f"  PyTorch         : {_torch_version()}")
     print(f"  Gradio          : {gr.__version__}")
     print("=" * 58)
     print()

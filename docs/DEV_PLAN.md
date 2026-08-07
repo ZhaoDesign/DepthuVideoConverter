@@ -9,7 +9,7 @@
 
 ## Overview
 
-This plan covers the phased implementation of a Tauri desktop application for Depth Video Converter, built on top of an extracted shared Python core library.
+This plan covers the phased implementation of a Tauri desktop application for DepthuVideoConverter, built on top of an extracted shared Python core library.
 
 **Total phases:** 5  
 **Estimated effort:** ~2–3 days (all-in)

@@ -1,36 +1,41 @@
 #!/usr/bin/env python3
-"""Native Qt desktop UI for Contour Control Tool."""
+"""Native Qt desktop UI for DepthuVideoConverter."""
 
 from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import time
 import traceback
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 
-APP_TITLE = "视频深度控制图工具"
-APP_DIR_NAME = "DepthVideoConverter"
+
+APP_TITLE = "DepthuVideoConverter"
+APP_DIR_NAME = "DepthuVideoConverter"
+LEGACY_APP_DIR_NAMES = ("DepthVideoConverter",)
+GITHUB_URL = "https://github.com/ZhaoDesign/DepthuVideoConverter"
 APP_ICON_ICO = "contour-control-tool.ico"
 APP_ICON_PNG = "contour-control-tool.png"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 
 WINDOW_WIDTH = 1110
-WINDOW_HEIGHT = 800
+WINDOW_HEIGHT = 852
 TITLE_BAR_HEIGHT = 36
 PANEL_WIDTH = 527
-PANEL_HEIGHT = 744
+PANEL_HEIGHT = 792
 INNER_WIDTH = 495
 VIDEO_SURFACE_HEIGHT = 321
-TRANSPORT_HEIGHT = 32
+TRANSPORT_HEIGHT = 36
 MEDIA_AREA_HEIGHT = VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT
 
 MODEL_DISPLAY_LABELS = {
-    "Small (fastest, ~99 MB)": "Small（fastest,~99 MB）",
-    "Base (balanced, ~392 MB)": "Base（balance, ~392MB）",
-    "Large (best quality, ~1.3 GB)": "Large（best, ~1.3GB）",
+    "Small (fastest, ~99 MB)": "Small（最快，约 99 MB）",
+    "Base (balanced, ~392 MB)": "Base（均衡，约 392 MB）",
+    "Large (best quality, ~1.3 GB)": "Large（高质量，约 1.3 GB）",
 }
 
 _script_dir = str(Path(__file__).resolve().parent)
@@ -39,13 +44,23 @@ if _script_dir not in sys.path:
 
 
 def _user_data_dir() -> Path:
+    override = os.environ.get("DEPTH_APP_DATA_DIR")
+    if override:
+        return Path(override).expanduser()
     if sys.platform == "darwin":
         root = Path.home() / "Library" / "Application Support"
     elif os.name == "nt":
         root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return root / APP_DIR_NAME
+    preferred = root / APP_DIR_NAME
+    if preferred.exists():
+        return preferred
+    for legacy_name in LEGACY_APP_DIR_NAMES:
+        legacy = root / legacy_name
+        if legacy.exists():
+            return legacy
+    return preferred
 
 
 def _configure_runtime() -> Path:
@@ -81,6 +96,23 @@ def _merge_proxy_bypass(current: str | None, required: str) -> str:
 
 
 DATA_DIR = _configure_runtime()
+
+
+def _show_native_error(title: str, message: str) -> None:
+    if sys.platform == "darwin":
+        script = (
+            'on run argv\n'
+            'display alert (item 1 of argv) message (item 2 of argv) as critical buttons {"确定"} default button 1\n'
+            'end run'
+        )
+        subprocess.run(["osascript", "-e", script, title, message], check=False)
+        return
+    if os.name == "nt":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)
+        return
+    print(f"{title}: {message}", file=sys.stderr)
 
 try:
     from PySide6.QtCore import QPoint, QRectF, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
@@ -125,21 +157,20 @@ try:
         process_video,
     )
 except ImportError:
-    import ctypes
-
     msg = traceback.format_exc()
     log_path = DATA_DIR / "crash.log"
     try:
         log_path.write_text(msg, encoding="utf-8")
     except OSError:
         pass
-    ctypes.windll.user32.MessageBoxW(
-        0,
-        f"运行环境加载失败，请检查安装是否完整。\n\n{msg}\n\n日志: {log_path}",
+    _show_native_error(
         APP_TITLE,
-        0x10,
+        f"运行环境加载失败，请检查安装是否完整。\n\n{msg}\n\n日志: {log_path}",
     )
     sys.exit(1)
+
+MODEL_FILE_SUFFIXES = {Path(cfg["path"]).suffix.lower() for cfg in MODEL_DEFS.values()}
+DEFAULT_MODEL_LABEL = next(iter(MODEL_DEFS))
 
 
 def _asset_path(name: str) -> Path:
@@ -367,13 +398,13 @@ class StaticTransportControls(QFrame):
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 100)
         self._slider.setValue(0)
-        self._slider.setFixedWidth(263)
-        controls.addWidget(self._slider)
+        self._slider.setMinimumWidth(160)
+        controls.addWidget(self._slider, 1)
 
         self._time_label = QLabel("0:00 / 0:00")
         self._time_label.setObjectName("muted")
         self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._time_label.setFixedWidth(64)
+        self._time_label.setFixedWidth(88)
         controls.addWidget(self._time_label)
 
         self._mute_btn = IconButton("icon-volume.png", self, size=32)
@@ -383,7 +414,7 @@ class StaticTransportControls(QFrame):
         self._volume_slider.setObjectName("volumeSlider")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(56)
+        self._volume_slider.setFixedWidth(88)
         controls.addWidget(self._volume_slider)
 
 
@@ -701,11 +732,11 @@ class TopBar(QFrame):
             lambda: _show_dialog(
                     self._window,
                     "关于",
-                    f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool",
+                    f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\n{GITHUB_URL}",
                 ),
             active=True,
         )
-        menu.add_action_item("Github", lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
+        menu.add_action_item("Github", lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
         return menu
 
     def _toggle_maximized(self) -> None:
@@ -741,6 +772,75 @@ class TopBar(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
+class FullscreenVideoDialog(QDialog):
+    """Simple fullscreen player used by both input and output previews."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        path: str,
+        position: int,
+        volume: float,
+        muted: bool,
+        should_play: bool,
+    ) -> None:
+        super().__init__(parent)
+        self._path = path
+        self._position = max(0, position)
+        self._should_play = should_play
+        self.setWindowTitle(APP_TITLE)
+        self.setWindowFlags(Qt.WindowType.Window)
+        self.setStyleSheet("QDialog { background: #000000; } QVideoWidget { background: #000000; }")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._video = QVideoWidget(self)
+        self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+        layout.addWidget(self._video)
+
+        self._player = QMediaPlayer(self)
+        self._audio = QAudioOutput(self)
+        self._audio.setVolume(volume)
+        self._audio.setMuted(muted)
+        self._player.setAudioOutput(self._audio)
+        self._player.setVideoOutput(self._video)
+        self._player.mediaStatusChanged.connect(self._on_media_status)
+        self._player.setSource(QUrl.fromLocalFile(path))
+        QTimer.singleShot(0, self._start)
+
+    def _start(self) -> None:
+        if self._position:
+            self._player.setPosition(self._position)
+        self._player.play()
+        if not self._should_play:
+            QTimer.singleShot(180, self._player.pause)
+
+    def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
+        if status in {
+            QMediaPlayer.MediaStatus.LoadedMedia,
+            QMediaPlayer.MediaStatus.BufferedMedia,
+        } and self._position:
+            self._player.setPosition(self._position)
+
+    def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if event.key() in {Qt.Key.Key_Escape, Qt.Key.Key_F}:
+            self.close()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        self.close()
+        event.accept()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        self._player.stop()
+        self._player.setSource(QUrl())
+        super().closeEvent(event)
+
+
 class VideoPlayer(QFrame):
     """Native media player with audio, mute, volume, and seek controls."""
 
@@ -750,6 +850,7 @@ class VideoPlayer(QFrame):
         self.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
         self._duration = 0
         self._slider_dragging = False
+        self._source_path: str | None = None
 
         self._player = QMediaPlayer(self)
         self._audio = QAudioOutput(self)
@@ -766,7 +867,7 @@ class VideoPlayer(QFrame):
         self._video_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._apply_rounded_mask(self._video_box)
         self._video_stack = QStackedLayout(self._video_box)
-        self._video_stack.setContentsMargins(0, 0, 0, 0)
+        self._video_stack.setContentsMargins(6, 6, 6, 6)
         self._video_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
 
         self._placeholder = QLabel("尚未加载视频")
@@ -774,10 +875,15 @@ class VideoPlayer(QFrame):
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._video_stack.addWidget(self._placeholder)
 
+        self._preview = QLabel()
+        self._preview.setObjectName("videoPreview")
+        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._video_stack.addWidget(self._preview)
+
         self._video = QVideoWidget()
         self._video.setObjectName("videoWidget")
-        self._video.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
-        self._apply_rounded_mask(self._video)
+        self._video.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
         self._video_stack.addWidget(self._video)
         self._video_stack.setCurrentWidget(self._placeholder)
@@ -790,6 +896,7 @@ class VideoPlayer(QFrame):
         self._fullscreen_btn.setFixedSize(24, 24)
         self._fullscreen_btn.move(INNER_WIDTH - 32, VIDEO_SURFACE_HEIGHT - 32)
         _set_icon(self._fullscreen_btn, "icon-fullscreen.png", 16)
+        self._fullscreen_btn.clicked.connect(self._open_fullscreen)
         self._fullscreen_btn.hide()
 
         controls_widget = QFrame(self)
@@ -804,15 +911,15 @@ class VideoPlayer(QFrame):
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 0)
-        self._slider.setFixedWidth(263)
+        self._slider.setMinimumWidth(160)
         self._slider.sliderPressed.connect(self._on_slider_press)
         self._slider.sliderReleased.connect(self._on_slider_release)
-        controls.addWidget(self._slider)
+        controls.addWidget(self._slider, 1)
 
         self._time_label = QLabel("0:00 / 0:00")
         self._time_label.setObjectName("muted")
         self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._time_label.setFixedWidth(64)
+        self._time_label.setFixedWidth(88)
         controls.addWidget(self._time_label)
 
         self._mute_btn = IconButton("icon-volume.png", self, size=32)
@@ -823,7 +930,7 @@ class VideoPlayer(QFrame):
         self._volume_slider.setObjectName("volumeSlider")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(56)
+        self._volume_slider.setFixedWidth(88)
         self._volume_slider.valueChanged.connect(self._on_volume_changed)
         controls.addWidget(self._volume_slider)
 
@@ -847,10 +954,10 @@ class VideoPlayer(QFrame):
 
     def load(self, path: str) -> None:
         self.stop()
+        self._source_path = path
         self._duration = 0
         self._player.setSource(QUrl.fromLocalFile(path))
-        self._placeholder.setText("")
-        self._video_stack.setCurrentWidget(self._placeholder)
+        self._show_preview(path)
         self._fullscreen_btn.show()
         self._fullscreen_btn.raise_()
         self._slider.setRange(0, 0)
@@ -910,6 +1017,53 @@ class VideoPlayer(QFrame):
             self._fullscreen_btn.hide()
             self._time_label.setText("无法播放")
 
+    def _show_preview(self, path: str) -> None:
+        pixmap = self._first_frame_pixmap(path)
+        if pixmap is None:
+            self._placeholder.setText(Path(path).name)
+            self._video_stack.setCurrentWidget(self._placeholder)
+            return
+        target = QSize(INNER_WIDTH - 12, VIDEO_SURFACE_HEIGHT - 12)
+        self._preview.setPixmap(
+            pixmap.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        self._preview.setText("")
+        self._video_stack.setCurrentWidget(self._preview)
+
+    def _first_frame_pixmap(self, path: str) -> QPixmap | None:
+        try:
+            import cv2
+
+            cap = cv2.VideoCapture(path)
+            ok, frame = cap.read()
+            cap.release()
+            if not ok or frame is None:
+                return None
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, channels = rgb.shape
+            image = QImage(rgb.data, w, h, channels * w, QImage.Format.Format_RGB888).copy()
+            return QPixmap.fromImage(image)
+        except Exception:
+            return None
+
+    def _open_fullscreen(self) -> None:
+        if not self._source_path:
+            return
+        dialog = FullscreenVideoDialog(
+            self.window(),
+            self._source_path,
+            self._player.position(),
+            self._audio.volume(),
+            self._audio.isMuted(),
+            self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
+        )
+        dialog.showFullScreen()
+        dialog.exec()
+
     def _update_volume_icon(self) -> None:
         muted = self._audio.isMuted() or self._volume_slider.value() == 0
         self._mute_btn.set_icon_name("icon-volume-muted.png" if muted else "icon-volume.png")
@@ -923,6 +1077,8 @@ class VideoPlayer(QFrame):
     def cleanup(self) -> None:
         self.stop()
         self._player.setSource(QUrl())
+        self._source_path = None
+        self._preview.clear()
         self._placeholder.setText("尚未加载视频")
         self._video_stack.setCurrentWidget(self._placeholder)
         self._fullscreen_btn.hide()
@@ -1042,7 +1198,9 @@ class ConversionWorker(QObject):
             )
 
             final_path = _unique_output_path(self.input_path, self.output_dir)
-            shutil.copy2(temp_result, final_path)
+            temp_dir = Path(temp_result).parent
+            shutil.move(temp_result, final_path)
+            shutil.rmtree(temp_dir, ignore_errors=True)
             self.progress.emit(100, "转换完成")
             self.finished.emit(str(final_path))
         except Exception as exc:
@@ -1059,7 +1217,8 @@ class ContourControlWindow(QMainWindow):
         self.worker: ConversionWorker | None = None
 
         self.setWindowTitle(APP_TITLE)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        if sys.platform != "darwin":
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setMinimumSize(QSize(WINDOW_WIDTH, WINDOW_HEIGHT))
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         icon_path = _asset_path(APP_ICON_ICO)
@@ -1078,10 +1237,14 @@ class ContourControlWindow(QMainWindow):
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
-        main.addWidget(TopBar(self))
+        if sys.platform == "darwin":
+            self._build_menubar()
+        else:
+            main.addWidget(TopBar(self))
 
         content = QHBoxLayout()
-        content.setContentsMargins(16, 4, 16, 16)
+        top_margin = 16 if sys.platform == "darwin" else 4
+        content.setContentsMargins(16, top_margin, 16, 16)
         content.setSpacing(24)
         content.addWidget(self._build_left_panel(), 0)
         content.addWidget(self._build_right_panel(), 0)
@@ -1089,15 +1252,19 @@ class ContourControlWindow(QMainWindow):
 
     def _build_menubar(self) -> None:
         mb = self.menuBar()
-        mb.setStyleSheet("""
-            QMenuBar { background: #FFFFFF; color: #374151; border-bottom: 1px solid #E5E7EB; padding: 2px 8px; }
-            QMenuBar::item { padding: 6px 12px; border-radius: 4px; }
-            QMenuBar::item:selected { background: #F3F4F6; }
-            QMenu { background: #FFFFFF; color: #374151; border: 1px solid #E5E7EB; padding: 4px; margin: 0; }
-            QMenu::item { padding: 8px 24px; border-radius: 4px; }
-            QMenu::item:selected { background: #F3F4F6; }
-            QMenu::separator { height: 1px; background: #E5E7EB; margin: 4px 12px; }
-        """)
+        mb.clear()
+        if sys.platform == "darwin":
+            mb.setNativeMenuBar(True)
+        else:
+            mb.setStyleSheet("""
+                QMenuBar { background: #FFFFFF; color: #374151; border-bottom: 1px solid #E5E7EB; padding: 2px 8px; }
+                QMenuBar::item { padding: 6px 12px; border-radius: 4px; }
+                QMenuBar::item:selected { background: #F3F4F6; }
+                QMenu { background: #FFFFFF; color: #374151; border: 1px solid #E5E7EB; padding: 4px; margin: 0; }
+                QMenu::item { padding: 8px 24px; border-radius: 4px; }
+                QMenu::item:selected { background: #F3F4F6; }
+                QMenu::separator { height: 1px; background: #E5E7EB; margin: 4px 12px; }
+            """)
 
         file_menu = mb.addMenu("文件")
         open_act = QAction("打开视频", self)
@@ -1120,7 +1287,7 @@ class ContourControlWindow(QMainWindow):
         uninstall_act.triggered.connect(self._uninstall_app)
         settings_menu.addAction(uninstall_act)
 
-        model_menu = mb.addMenu("模型下载")
+        model_menu = mb.addMenu("模型")
         for name, cfg in MODEL_DEFS.items():
             sub = model_menu.addMenu(name.split(" (")[0])
             for url in cfg["urls"]:
@@ -1131,10 +1298,10 @@ class ContourControlWindow(QMainWindow):
 
         help_menu = mb.addMenu("帮助")
         about_act = QAction("关于", self)
-        about_act.triggered.connect(lambda: _show_dialog(self, "关于", f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\nhttps://github.com/ZhaoDesign/contour-control-tool"))
+        about_act.triggered.connect(lambda: _show_dialog(self, "关于", f"{APP_TITLE}\n\n基于 Depth Anything V2 的视频深度图转换工具\n{GITHUB_URL}"))
         help_menu.addAction(about_act)
         github_act = QAction("GitHub 主页", self)
-        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/ZhaoDesign/contour-control-tool")))
+        github_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
         help_menu.addAction(github_act)
 
     def _uninstall_app(self) -> None:
@@ -1142,6 +1309,7 @@ class ContourControlWindow(QMainWindow):
         candidates = [
             Path(__file__).resolve().parent.parent / "unins000.exe",
             Path(__file__).resolve().parent / "unins000.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / APP_TITLE / "unins000.exe",
             Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Contour Control Tool" / "unins000.exe",
         ]
         for uninstall_exe in candidates:
@@ -1164,6 +1332,7 @@ class ContourControlWindow(QMainWindow):
         if d:
             self.output_dir = d
             self.output_dir_label.setText(f"输出到： {_short_path(d, 28)}")
+            self.output_dir_label.setToolTip(d)
 
     def _open_model_dir(self) -> None:
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1179,12 +1348,15 @@ class ContourControlWindow(QMainWindow):
         items = list(MODEL_DEFS.keys())
         for key in items:
             self.model_combo.addItem(_model_display_label(key), key)
-        for f in sorted(MODELS_DIR.glob("*.onnx")):
-            name = f.stem
-            if not any(name in str(cfg["path"]) for cfg in MODEL_DEFS.values()):
-                custom = f"{name} (自定义)"
-                items.append(custom)
-                self.model_combo.addItem(custom, custom)
+        if MODELS_DIR.is_dir():
+            for f in sorted(
+                p for p in MODELS_DIR.iterdir() if p.is_file() and p.suffix.lower() in MODEL_FILE_SUFFIXES
+            ):
+                name = f.stem
+                if not any(name == Path(cfg["path"]).stem for cfg in MODEL_DEFS.values()):
+                    custom = f"{name} (自定义)"
+                    items.append(custom)
+                    self.model_combo.addItem(custom, custom)
         if current in items:
             _set_combo_data(self.model_combo, current)
 
@@ -1212,7 +1384,7 @@ class ContourControlWindow(QMainWindow):
 
         section = QLabel("输入视频")
         section.setObjectName("sectionTitle")
-        section.setFixedHeight(17)
+        section.setFixedHeight(20)
         layout.addWidget(section)
 
         media_area = QWidget()
@@ -1239,13 +1411,13 @@ class ContourControlWindow(QMainWindow):
 
         settings_title = QLabel("转换参数")
         settings_title.setObjectName("sectionTitle")
-        settings_title.setFixedHeight(17)
+        settings_title.setFixedHeight(20)
         layout.addWidget(settings_title)
 
         self.model_combo = FigmaComboBox()
         for key in MODEL_DEFS:
             self.model_combo.addItem(_model_display_label(key), key)
-        _set_combo_data(self.model_combo, "Small (fastest, ~99 MB)")
+        _set_combo_data(self.model_combo, DEFAULT_MODEL_LABEL)
         _configure_combo(self.model_combo)
 
         self.model_folder_btn = IconButton("icon-folder.png", self)
@@ -1261,59 +1433,60 @@ class ContourControlWindow(QMainWindow):
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
         self.smoothing_slider.setValue(60)
-        self.smoothing_slider.setFixedWidth(415)
+        self.smoothing_slider.setMinimumWidth(320)
         self.smoothing_value = QLabel("60")
         self.smoothing_value.setObjectName("muted")
         self.smoothing_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.smoothing_value.setFixedWidth(20)
+        self.smoothing_value.setFixedWidth(28)
         self.smoothing_slider.valueChanged.connect(lambda value: self.smoothing_value.setText(str(value)))
 
         model_row_widget = QWidget()
-        model_row_widget.setFixedSize(INNER_WIDTH, 36)
+        model_row_widget.setFixedSize(INNER_WIDTH, 40)
         model_row = QHBoxLayout(model_row_widget)
         model_row.setContentsMargins(0, 0, 0, 0)
         model_row.setSpacing(12)
         model_row.addWidget(self._field_label("模型"))
-        self.model_combo.setFixedWidth(403)
-        model_row.addWidget(self.model_combo)
+        self.model_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        model_row.addWidget(self.model_combo, 1)
         model_row.addWidget(self.model_folder_btn)
         layout.addWidget(model_row_widget)
 
         resolution_row_widget = QWidget()
-        resolution_row_widget.setFixedSize(INNER_WIDTH, 36)
+        resolution_row_widget.setFixedSize(INNER_WIDTH, 40)
         resolution_row = QHBoxLayout(resolution_row_widget)
         resolution_row.setContentsMargins(0, 0, 0, 0)
         resolution_row.setSpacing(12)
         resolution_row.addWidget(self._field_label("分辨率"))
-        self.resolution_combo.setFixedWidth(447)
-        resolution_row.addWidget(self.resolution_combo)
+        self.resolution_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        resolution_row.addWidget(self.resolution_combo, 1)
         layout.addWidget(resolution_row_widget)
 
         smoothing_row_widget = QWidget()
-        smoothing_row_widget.setFixedSize(INNER_WIDTH, 17)
+        smoothing_row_widget.setFixedSize(INNER_WIDTH, 24)
         smoothing_row = QHBoxLayout(smoothing_row_widget)
         smoothing_row.setContentsMargins(0, 0, 0, 0)
         smoothing_row.setSpacing(12)
         smoothing_row.addWidget(self._field_label("平滑"))
-        smoothing_row.addWidget(self.smoothing_slider)
+        self.smoothing_slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        smoothing_row.addWidget(self.smoothing_slider, 1)
         smoothing_row.addWidget(self.smoothing_value)
         layout.addWidget(smoothing_row_widget)
 
         self.invert_check = QCheckBox("黑白反转")
-        self.invert_check.setFixedHeight(20)
-        self.preserve_audio_check = QCheckBox("黑白反转")
-        self.preserve_audio_check.setFixedHeight(20)
+        self.invert_check.setFixedHeight(24)
+        self.preserve_audio_check = QCheckBox("保留原声")
+        self.preserve_audio_check.setFixedHeight(24)
         self.preserve_audio_check.setChecked(True)
         layout.addWidget(self.invert_check)
         layout.addWidget(self.preserve_audio_check)
 
         output_row_widget = QWidget()
-        output_row_widget.setFixedSize(INNER_WIDTH, 32)
+        output_row_widget.setFixedSize(INNER_WIDTH, 36)
         output_row = QHBoxLayout(output_row_widget)
         output_row.setContentsMargins(0, 0, 0, 0)
         self.output_dir_label = QLabel("输出到： 跟随输入视频")
         self.output_dir_label.setObjectName("muted")
-        self.output_dir_label.setFixedHeight(32)
+        self.output_dir_label.setFixedHeight(36)
         self.output_btn = QPushButton("输出位置")
         self.output_btn.setObjectName("secondaryButton")
         self.output_btn.setFixedSize(84, 32)
@@ -1324,7 +1497,7 @@ class ContourControlWindow(QMainWindow):
 
         self.start_btn = QPushButton("开始转换")
         self.start_btn.setObjectName("primaryButton")
-        self.start_btn.setFixedHeight(44)
+        self.start_btn.setFixedHeight(48)
         self.start_btn.clicked.connect(self._start_conversion)
         layout.addWidget(self.start_btn)
 
@@ -1340,7 +1513,7 @@ class ContourControlWindow(QMainWindow):
 
         title = QLabel("深度视频")
         title.setObjectName("sectionTitle")
-        title.setFixedHeight(17)
+        title.setFixedHeight(20)
         layout.addWidget(title)
 
         self._video_player = VideoPlayer()
@@ -1348,7 +1521,7 @@ class ContourControlWindow(QMainWindow):
 
         status_title = QLabel("任务状态")
         status_title.setObjectName("sectionTitle")
-        status_title.setFixedHeight(17)
+        status_title.setFixedHeight(20)
         layout.addWidget(status_title)
         self.state_label = QLabel("等待视频")
         self.state_label.setVisible(False)
@@ -1357,26 +1530,26 @@ class ContourControlWindow(QMainWindow):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedSize(INNER_WIDTH, 12)
+        self.progress_bar.setFixedSize(INNER_WIDTH, 14)
         layout.addWidget(self.progress_bar)
 
         self.progress_label = QLabel("选择一个视频后开始转换。")
         self.progress_label.setObjectName("muted")
-        self.progress_label.setFixedHeight(17)
+        self.progress_label.setFixedHeight(20)
         layout.addWidget(self.progress_label)
 
         self.log_box = QPlainTextEdit()
         self.log_box.setObjectName("logBox")
         self.log_box.setReadOnly(True)
         self.log_box.setPlaceholderText("转换进度和模型下载状态会显示在这里")
-        self.log_box.setFixedSize(INNER_WIDTH, 156)
+        self.log_box.setFixedSize(INNER_WIDTH, 164)
         layout.addWidget(self.log_box)
 
         result = QFrame()
         result.setObjectName("resultPanel")
-        result.setFixedSize(INNER_WIDTH, 56)
+        result.setFixedSize(INNER_WIDTH, 72)
         result_layout = QHBoxLayout(result)
-        result_layout.setContentsMargins(12, 12, 12, 12)
+        result_layout.setContentsMargins(12, 10, 12, 10)
         result_layout.setSpacing(12)
 
         self.result_label = QLabel("尚未生成输出视频")
@@ -1401,7 +1574,7 @@ class ContourControlWindow(QMainWindow):
     def _field_label(text: str) -> QLabel:
         label = QLabel(text)
         label.setObjectName("fieldLabel")
-        label.setFixedWidth(36)
+        label.setFixedWidth(44)
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         return label
 
@@ -1429,6 +1602,7 @@ class ContourControlWindow(QMainWindow):
         if not hasattr(self, "output_dir"):
             self.output_dir = str(_default_output_dir(path))
             self.output_dir_label.setText(f"输出到： {_short_path(self.output_dir, 28)}")
+        self.output_dir_label.setToolTip(self.output_dir)
         self.progress_label.setText("选择一个视频后开始转换。")
         self.state_label.setText("已选择视频")
 
@@ -1491,6 +1665,7 @@ class ContourControlWindow(QMainWindow):
         self.output_path = output_path
         self.state_label.setText("已完成")
         self.result_label.setText(_short_path(output_path, 90))
+        self.result_label.setToolTip(output_path)
         self.open_output_btn.setEnabled(True)
         self.open_folder_btn.setEnabled(True)
         self._set_controls_enabled(True)
@@ -1688,13 +1863,18 @@ def apply_style(app: QApplication) -> None:
         }
         QVideoWidget#videoWidget {
             background: #000000;
+            border-radius: 12px;
         }
         QLabel#videoPlaceholder {
             background: #000000;
             color: #9AA3B0;
-            border-radius: 16px;
+            border-radius: 12px;
             font-size: 12px;
             font-weight: 500;
+        }
+        QLabel#videoPreview {
+            background: #000000;
+            border-radius: 12px;
         }
         QLabel#dropTitle {
             color: #0F1828;
@@ -1928,18 +2108,14 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        import ctypes
-
         msg = traceback.format_exc()
         log_path = DATA_DIR / "crash.log"
         try:
             log_path.write_text(msg, encoding="utf-8")
         except OSError:
             pass
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            f"启动失败:\n\n{msg}\n\n日志: {log_path}",
+        _show_native_error(
             APP_TITLE,
-            0x10,
+            f"启动失败:\n\n{msg}\n\n日志: {log_path}",
         )
         sys.exit(1)

@@ -19,7 +19,7 @@ PYTHON_ZIP_URL = (
     f"https://www.python.org/ftp/python/{PYTHON_VERSION}/"
     f"python-{PYTHON_VERSION}-embed-amd64.zip"
 )
-PACKAGE_NAME = "DepthVideoConverter-Windows-x64"
+PACKAGE_NAME = "DepthuVideoConverter-Windows-x64"
 
 
 def _run(command: list[str], cwd: Path | None = None) -> None:
@@ -96,7 +96,7 @@ def _build_launcher(package_dir: Path, build_dir: Path) -> None:
         "-municode",
         "-mwindows",
         "-o",
-        str(package_dir / "Depth Video Converter.exe"),
+        str(package_dir / "DepthuVideoConverter.exe"),
     ])
 
 
@@ -107,14 +107,14 @@ def _write_runtime_config(package_dir: Path) -> None:
         encoding="utf-8",
     )
     (package_dir / "使用说明.txt").write_text(
-        "视频深度控制图工具 Windows 便携版\n\n"
+        "DepthuVideoConverter Windows 便携版\n\n"
         "1. 请先完整解压此压缩包。\n"
-        "2. 双击“Depth Video Converter.exe”。\n"
+        "2. 双击“DepthuVideoConverter.exe”。\n"
         "3. 稍等片刻，网页操作界面会自动打开，并保留一个小控制窗口。\n"
         "4. 首次选择模型时会自动下载模型。\n"
         "5. 退出时可点击控制窗口或网页底部的“退出应用”，也可以关闭浏览器标签页/窗口并确认离开。\n\n"
         "已内置常用 Windows 运行库。请勿单独移动 EXE；它需要同目录中的运行文件。\n"
-        "模型位置：%LOCALAPPDATA%\\DepthVideoConverter\\models\n",
+        "模型位置：%LOCALAPPDATA%\\DepthuVideoConverter\\models\n",
         encoding="utf-8-sig",
     )
 

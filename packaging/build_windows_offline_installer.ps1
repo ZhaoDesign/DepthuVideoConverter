@@ -133,7 +133,7 @@ $env:APP_VERSION = $AppVersion
 & $Iscc $IssFile
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
-$outputExe = Join-Path $ProjectRoot "dist\windows-installer\ContourControlTool-Windows-x64-OfflineSetup.exe"
+$outputExe = Join-Path $ProjectRoot "dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup.exe"
 if (Test-Path $outputExe) {
     $exeSize = (Get-Item $outputExe).Length / 1MB
     Write-Host ""

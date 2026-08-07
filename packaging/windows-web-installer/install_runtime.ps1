@@ -22,8 +22,15 @@ $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 $InstallerDir = Join-Path $InstallDir "installer"
 $AppDir = Join-Path $InstallDir "app"
-$CacheDir = Join-Path $env:TEMP "ContourControlToolInstaller"
-$DataDir = Join-Path $env:LOCALAPPDATA "DepthVideoConverter"
+$CacheDir = Join-Path $env:TEMP "DepthuVideoConverterInstaller"
+$PreferredDataDir = Join-Path $env:LOCALAPPDATA "DepthuVideoConverter"
+$LegacyDataDir = Join-Path $env:LOCALAPPDATA "DepthVideoConverter"
+if ((Test-Path -LiteralPath $PreferredDataDir) -or -not (Test-Path -LiteralPath $LegacyDataDir)) {
+    $DataDir = $PreferredDataDir
+}
+else {
+    $DataDir = $LegacyDataDir
+}
 $RuntimeRoot = Join-Path $env:LOCALAPPDATA "CCT"
 $RuntimeDir = Join-Path $RuntimeRoot "rt311cpu"
 $LogPath = Join-Path $DataDir "installer.log"
@@ -60,7 +67,7 @@ function Invoke-Download {
         }
     }
     else {
-        Invoke-WebRequest -Uri $Url -OutFile $tmp -Headers @{ "User-Agent" = "ContourControlToolInstaller" }
+        Invoke-WebRequest -Uri $Url -OutFile $tmp -Headers @{ "User-Agent" = "DepthuVideoConverterInstaller" }
     }
 
     Move-Item -LiteralPath $tmp -Destination $Destination -Force
@@ -267,7 +274,7 @@ catch {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show(
             "Runtime installation failed: $($_.Exception.Message)`n`nLog path: $LogPath",
-            "Contour Control Tool",
+            "DepthuVideoConverter",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error
         ) | Out-Null

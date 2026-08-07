@@ -1,5 +1,5 @@
-#define MyAppName "视频深度控制图工具"
-#define MyAppEnglishName "Contour Control Tool"
+#define MyAppName "DepthuVideoConverter"
+#define MyAppEnglishName "DepthuVideoConverter"
 #define MyAppPublisher "ZhaoDesign"
 #define MyAppVersion GetEnv("APP_VERSION")
 #if MyAppVersion == ""
@@ -12,9 +12,9 @@ AppId={{8E32A2D1-F74A-4B6C-A9D5-3F8B56C0FD22}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/ZhaoDesign/contour-control-tool
-AppSupportURL=https://github.com/ZhaoDesign/contour-control-tool/issues
-DefaultDirName={localappdata}\Programs\Contour Control Tool
+AppPublisherURL=https://github.com/ZhaoDesign/DepthuVideoConverter
+AppSupportURL=https://github.com/ZhaoDesign/DepthuVideoConverter/issues
+DefaultDirName={localappdata}\Programs\DepthuVideoConverter
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
@@ -25,7 +25,7 @@ WizardImageFile=..\..\assets\installer-banner.bmp
 WizardSmallImageFile=..\..\assets\installer-small.bmp
 UninstallDisplayIcon={app}\assets\contour-control-tool.ico
 OutputDir=..\..\dist\windows-installer
-OutputBaseFilename=ContourControlTool-Windows-x64-WebSetup
+OutputBaseFilename=DepthuVideoConverter-Windows-x64-WebSetup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -161,7 +161,7 @@ begin
              '• 防火墙阻止下载' + #13#10 +
              '• 磁盘空间不足' + #13#10 + #13#10 +
              '请检查日志：' + #13#10 +
-             ExpandConstant('{localappdata}\DepthVideoConverter\installer.log') + #13#10 + #13#10 +
+             ExpandConstant('{localappdata}\DepthuVideoConverter\installer.log') + #13#10 + #13#10 +
              '可重新运行安装程序以重试。', mbError, MB_OK);
     end;
     if not VCRedistInstalled then

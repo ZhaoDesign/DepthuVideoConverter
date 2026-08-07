@@ -1,4 +1,4 @@
-# Depth Video Converter — Architecture
+# DepthuVideoConverter — Architecture
 
 > **Version:** 2.0  
 > **Last updated:** 2026-07-23  
@@ -26,7 +26,7 @@
 
 ## Overview
 
-Depth Video Converter (v2.0) is a multi-interface video depth-estimation tool:
+DepthuVideoConverter (v2.0) is a multi-interface video depth-estimation tool:
 
 | Interface | Entrypoint | Target user |
 |---|---|---|
@@ -371,7 +371,7 @@ Core responsibilities:
 |---|---|
 | Default size | 960 × 680 px |
 | Min size | 720 × 500 px |
-| Title | Depth Video Converter |
+| Title | DepthuVideoConverter |
 | Identifier | `com.depthvideo.converter` |
 | Bundle targets | `.dmg` (macOS), `.msi` (Windows), `.deb` + `.AppImage` (Linux) |
 

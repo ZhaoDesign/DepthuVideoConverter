@@ -1,4 +1,4 @@
-"""Contour Control Tool — shared core library.
+"""DepthuVideoConverter — shared core library.
 
 This package contains all domain logic for depth-video conversion.
 It is UI-agnostic and is consumed by:

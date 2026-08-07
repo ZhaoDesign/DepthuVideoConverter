@@ -4,7 +4,7 @@ This note records the macOS web-installer changes so another machine or agent ca
 
 ## Goal
 
-Create a small macOS release package for Contour Control Tool. The installer should keep the app bundle light, then download the Python runtime and dependencies on first launch instead of shipping a large prebuilt `.app`.
+Create a small macOS release package for DepthuVideoConverter. The installer should keep the app bundle light, then download the Python runtime and dependencies on first launch instead of shipping a large prebuilt `.app`.
 
 ## Why this path was chosen
 
@@ -13,7 +13,7 @@ The existing macOS package bundles the full runtime into the app, which makes th
 ## Files Added
 
 - `packaging/build_macos_web_installer.sh`
-  - Builds `ContourControlTool-macOS-WebSetup.zip` and `.dmg`.
+  - Builds `DepthuVideoConverter-macOS-WebSetup.zip` and `.dmg`.
   - Assembles a small app bundle with a shell launcher.
 
 - `packaging/macos-web-installer/launch_runtime.sh`
@@ -40,7 +40,7 @@ The existing macOS package bundles the full runtime into the app, which makes th
   - `rt311mac/` for the app virtual environment
   - `cache/` for installer downloads
 
-- `~/Library/Application Support/DepthVideoConverter/models`
+- `~/Library/Application Support/DepthuVideoConverter/models`
   - model checkpoints downloaded on first use
 
 ## Build Command
@@ -53,8 +53,8 @@ zsh packaging/build_macos_web_installer.sh /path/to/output
 
 Expected outputs:
 
-- `ContourControlTool-macOS-WebSetup.zip`
-- `ContourControlTool-macOS-WebSetup.dmg`
+- `DepthuVideoConverter-macOS-WebSetup.zip`
+- `DepthuVideoConverter-macOS-WebSetup.dmg`
 
 ## Runtime Test Checklist
 
@@ -65,12 +65,12 @@ Use a clean macOS machine or VM:
 3. Confirm the first launch shows a notification and prepares the runtime.
 4. Confirm the local Gradio page opens.
 5. Process a small video with `Small` or `Base`.
-6. Confirm model downloads go to `~/Library/Application Support/DepthVideoConverter/models`.
+6. Confirm model downloads go to `~/Library/Application Support/DepthuVideoConverter/models`.
 
 If installation fails, collect:
 
 ```text
-~/Library/Application Support/DepthVideoConverter/installer.log
+~/Library/Application Support/DepthuVideoConverter/installer.log
 ```
 
 ## Known Tradeoffs

@@ -4,7 +4,7 @@
 #
 # 对应 Windows 的 build_windows_offline_installer.ps1：
 #   - 内嵌 Python 3.11 虚拟环境 + 所有依赖
-#   - 内嵌 Small ONNX 模型（首次运行无需联网）
+#   - 内嵌 Small PyTorch .pth 模型（首次运行无需联网）
 #   - 输出 .dmg 和 .zip
 #
 # 用法:
@@ -22,7 +22,7 @@ OUTPUT_DIR="${1:-$ROOT/build/macos-offline-installer/output}"
 BUILD_DIR="$ROOT/build/macos-offline-installer"
 STAGE_DIR="$BUILD_DIR/stage"
 CACHE_DIR="$BUILD_DIR/cache"
-APP_NAME="ContourControlTool"
+APP_NAME="DepthuVideoConverter"
 APP_BUNDLE="$APP_NAME.app"
 APP_PATH="$STAGE_DIR/$APP_BUNDLE"
 CONTENTS_DIR="$APP_PATH/Contents"
@@ -80,19 +80,19 @@ log "正在验证运行环境..."
 RUNTIME_SIZE_MB=$(du -sm "$RUNTIME_DIR" | awk '{print $1}')
 log "运行环境大小: ${RUNTIME_SIZE_MB} MB"
 
-# ── 3. 下载 Small ONNX 模型 ─────────────────────────────────────────
-MODEL_FILE="$MODELS_DIR/depth_anything_v2_vits.onnx"
-CACHED_MODEL="$CACHE_DIR/depth_anything_v2_vits.onnx"
+# ── 3. 下载 Small PyTorch 模型 ───────────────────────────────────────
+MODEL_FILE="$MODELS_DIR/depth_anything_v2_vits.pth"
+CACHED_MODEL="$CACHE_DIR/depth_anything_v2_vits.pth"
 
 if [[ -f "$CACHED_MODEL" ]] && (( $(stat -f%z "$CACHED_MODEL" 2>/dev/null || stat -c%s "$CACHED_MODEL" 2>/dev/null) > 1000000 )); then
     log "使用缓存的 Small 模型"
     cp "$CACHED_MODEL" "$MODEL_FILE"
 else
-    log "正在下载 Small ONNX 模型 (~99 MB)..."
-    MODEL_REPO="onnx-community/depth-anything-v2-small"
+    log "正在下载 Small PyTorch 模型 (~95 MB)..."
+    MODEL_REPO="depth-anything/Depth-Anything-V2-Small"
     MODEL_URLS=(
-        "${HF_MIRROR}/${MODEL_REPO}/resolve/main/onnx/model.onnx"
-        "https://huggingface.co/${MODEL_REPO}/resolve/main/onnx/model.onnx"
+        "${HF_MIRROR}/${MODEL_REPO}/resolve/main/depth_anything_v2_vits.pth"
+        "https://huggingface.co/${MODEL_REPO}/resolve/main/depth_anything_v2_vits.pth"
     )
     DOWNLOADED=0
     for url in "${MODEL_URLS[@]}"; do
@@ -117,8 +117,10 @@ cp "$ROOT/depth_video_converter.py"   "$APP_SRC_DIR/"
 cp "$ROOT/depth_video_cli.py"         "$APP_SRC_DIR/"
 cp "$ROOT/README.md"                  "$APP_SRC_DIR/"
 cp "$ROOT/README_CN.md"               "$APP_SRC_DIR/"
-cp -R "$ROOT/depth_converter"         "$APP_SRC_DIR/depth_converter"
-cp -R "$ROOT/depth_anything_v2"       "$APP_SRC_DIR/depth_anything_v2"
+/usr/bin/rsync -a --exclude '__pycache__/' --exclude '*.pyc' --exclude '.DS_Store' \
+  "$ROOT/depth_converter/" "$APP_SRC_DIR/depth_converter/"
+/usr/bin/rsync -a --exclude '__pycache__/' --exclude '*.pyc' --exclude '.DS_Store' \
+  "$ROOT/depth_anything_v2/" "$APP_SRC_DIR/depth_anything_v2/"
 mkdir -p "$APP_SRC_DIR/assets"
 cp "$ROOT/assets/"*.png "$APP_SRC_DIR/assets/" 2>/dev/null || true
 cp "$ROOT/assets/"*.ico "$APP_SRC_DIR/assets/" 2>/dev/null || true
@@ -137,9 +139,11 @@ APP_DIR="$RESOURCES_DIR/app"
 RUNTIME_DIR="$RESOURCES_DIR/runtime"
 BUNDLED_MODELS_DIR="$RESOURCES_DIR/models"
 
-DATA_DIR="$HOME/Library/Application Support/DepthVideoConverter"
+DATA_DIR="$HOME/Library/Application Support/DepthuVideoConverter"
 USER_MODELS_DIR="$DATA_DIR/models"
 LOG_PATH="$DATA_DIR/launcher.log"
+
+export PYTHONDONTWRITEBYTECODE=1
 
 mkdir -p "$USER_MODELS_DIR"
 touch "$LOG_PATH"
@@ -150,13 +154,13 @@ show_error() {
     local message="$1"
     /usr/bin/osascript - "$message" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
-    display alert "视频深度控制图工具无法启动" message (item 1 of argv) as critical buttons {"确定"} default button 1
+    display alert "DepthuVideoConverter 无法启动" message (item 1 of argv) as critical buttons {"确定"} default button 1
 end run
 APPLESCRIPT
 }
 
 {
-    log "Launching ContourControlTool (offline)"
+    log "Launching DepthuVideoConverter (offline)"
     log "App dir: $APP_DIR"
     log "Runtime dir: $RUNTIME_DIR"
 
@@ -167,7 +171,7 @@ APPLESCRIPT
 
     # 将内嵌模型复制到用户目录（如果用户还没有的话）
     if [[ -d "$BUNDLED_MODELS_DIR" ]]; then
-        for model in "$BUNDLED_MODELS_DIR"/*.onnx(N); do
+        for model in "$BUNDLED_MODELS_DIR"/*.pth(N); do
             target="$USER_MODELS_DIR/${model:t}"
             if [[ ! -f "$target" ]]; then
                 log "Copying bundled model: ${model:t}"
@@ -193,17 +197,17 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST_EOF
   <key>CFBundleDevelopmentRegion</key>
   <string>zh_CN</string>
   <key>CFBundleDisplayName</key>
-  <string>视频深度控制图工具</string>
+  <string>DepthuVideoConverter</string>
   <key>CFBundleExecutable</key>
   <string>$APP_NAME</string>
   <key>CFBundleIconFile</key>
   <string>depth-video-converter.icns</string>
   <key>CFBundleIdentifier</key>
-  <string>com.zhaodesign.contour-control-tool.offline</string>
+  <string>com.zhaodesign.depthuvideoconverter.offline</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>视频深度控制图工具</string>
+  <string>DepthuVideoConverter</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -229,8 +233,8 @@ TOTAL_SIZE_MB=$(du -sm "$APP_PATH" | awk '{print $1}')
 log "App 总大小: ${TOTAL_SIZE_MB} MB（未压缩）"
 
 # ── 10. 创建 ZIP 和 DMG ─────────────────────────────────────────────
-ZIP_PATH="$OUTPUT_DIR/ContourControlTool-macOS-OfflineSetup.zip"
-DMG_PATH="$OUTPUT_DIR/ContourControlTool-macOS-OfflineSetup.dmg"
+ZIP_PATH="$OUTPUT_DIR/DepthuVideoConverter-macOS-OfflineSetup.zip"
+DMG_PATH="$OUTPUT_DIR/DepthuVideoConverter-macOS-OfflineSetup.dmg"
 STAGE_DMG_DIR="$BUILD_DIR/dmg-stage"
 
 rm -rf "$ZIP_PATH" "$DMG_PATH" "$STAGE_DMG_DIR"
@@ -243,7 +247,7 @@ mkdir -p "$STAGE_DMG_DIR"
 /usr/bin/ditto "$APP_PATH" "$STAGE_DMG_DIR/$APP_BUNDLE"
 ln -s /Applications "$STAGE_DMG_DIR/Applications"
 /usr/bin/hdiutil create \
-    -volname "视频深度控制图工具" \
+    -volname "DepthuVideoConverter" \
     -srcfolder "$STAGE_DMG_DIR" \
     -format UDZO \
     -imagekey zlib-level=9 \

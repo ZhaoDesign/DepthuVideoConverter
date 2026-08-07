@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry point for Contour Control Tool."""
+"""CLI entry point for DepthuVideoConverter."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ import os
 import sys
 
 from depth_converter import MODEL_DEFS, RESOLUTION_PRESETS, process_video
+
+MODEL_LABELS = list(MODEL_DEFS.keys())
+DEFAULT_MODEL_LABEL = MODEL_LABELS[1] if len(MODEL_LABELS) > 1 else MODEL_LABELS[0]
 
 
 def main() -> None:
@@ -22,8 +25,8 @@ def main() -> None:
     )
     parser.add_argument(
         "-m", "--model",
-        choices=list(MODEL_DEFS.keys()),
-        default="Base (balanced, ~372 MB)",
+        choices=MODEL_LABELS,
+        default=DEFAULT_MODEL_LABEL,
         help="Model size (default: Base)",
     )
     parser.add_argument(

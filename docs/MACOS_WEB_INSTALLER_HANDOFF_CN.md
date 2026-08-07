@@ -15,7 +15,7 @@
 
 - `packaging/build_macos_web_installer.sh`
   - 构建 macOS 小体积联网安装包。
-  - 输出 `ContourControlTool-macOS-WebSetup.zip` 和 `ContourControlTool-macOS-WebSetup.dmg`。
+  - 输出 `DepthuVideoConverter-macOS-WebSetup.zip` 和 `DepthuVideoConverter-macOS-WebSetup.dmg`。
 
 - `packaging/macos-web-installer/launch_runtime.sh`
   - App 双击后的真正入口。
@@ -66,13 +66,13 @@ cache/      下载缓存
 模型文件仍然放在：
 
 ```text
-~/Library/Application Support/DepthVideoConverter/models
+~/Library/Application Support/DepthuVideoConverter/models
 ```
 
 安装日志在：
 
 ```text
-~/Library/Application Support/DepthVideoConverter/installer.log
+~/Library/Application Support/DepthuVideoConverter/installer.log
 ```
 
 ## 构建方式
@@ -86,8 +86,8 @@ APP_VERSION=2026.07.31.2 zsh packaging/build_macos_web_installer.sh /Users/xmile
 输出文件：
 
 ```text
-/Users/xmiles/Documents/深度视频转化项目/ContourControlTool-macOS-WebSetup.zip
-/Users/xmiles/Documents/深度视频转化项目/ContourControlTool-macOS-WebSetup.dmg
+/Users/xmiles/Documents/深度视频转化项目/DepthuVideoConverter-macOS-WebSetup.zip
+/Users/xmiles/Documents/深度视频转化项目/DepthuVideoConverter-macOS-WebSetup.dmg
 ```
 
 ## 验证方式
@@ -95,21 +95,21 @@ APP_VERSION=2026.07.31.2 zsh packaging/build_macos_web_installer.sh /Users/xmile
 1. 检查 ZIP：
 
 ```bash
-unzip -tq /Users/xmiles/Documents/深度视频转化项目/ContourControlTool-macOS-WebSetup.zip
+unzip -tq /Users/xmiles/Documents/深度视频转化项目/DepthuVideoConverter-macOS-WebSetup.zip
 ```
 
 2. 检查 DMG：
 
 ```bash
-hdiutil verify /Users/xmiles/Documents/深度视频转化项目/ContourControlTool-macOS-WebSetup.dmg
+hdiutil verify /Users/xmiles/Documents/深度视频转化项目/DepthuVideoConverter-macOS-WebSetup.dmg
 ```
 
 3. 检查 DMG 里的 App 结构：
 
 ```bash
-hdiutil attach /Users/xmiles/Documents/深度视频转化项目/ContourControlTool-macOS-WebSetup.dmg -nobrowse
-CCT_MACOS_INSTALLER_SELF_TEST=1 "/Volumes/Contour Control Tool/ContourControlTool.app/Contents/MacOS/ContourControlTool"
-hdiutil detach "/Volumes/Contour Control Tool"
+hdiutil attach /Users/xmiles/Documents/深度视频转化项目/DepthuVideoConverter-macOS-WebSetup.dmg -nobrowse
+CCT_MACOS_INSTALLER_SELF_TEST=1 "/Volumes/DepthuVideoConverter/DepthuVideoConverter.app/Contents/MacOS/DepthuVideoConverter"
+hdiutil detach "/Volumes/DepthuVideoConverter"
 ```
 
 4. 检查首次启动安装流程，但不真正打开网页：
@@ -118,7 +118,7 @@ hdiutil detach "/Volumes/Contour Control Tool"
 CCT_RUNTIME_ROOT=/tmp/cct-mac-web-runtime-test \
 CCT_DATA_DIR=/tmp/cct-mac-web-data-test \
 CCT_MACOS_INSTALL_RUNTIME_ONLY=1 \
-build/macos-web-installer/stage/ContourControlTool.app/Contents/MacOS/ContourControlTool
+build/macos-web-installer/stage/DepthuVideoConverter.app/Contents/MacOS/DepthuVideoConverter
 ```
 
 成功时日志里会出现：

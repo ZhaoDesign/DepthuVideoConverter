@@ -70,7 +70,7 @@ def main() -> None:
     _make_installer_small(master)
 
     if shutil.which("iconutil"):
-        iconset = ASSETS / "DepthVideoConverter.iconset"
+        iconset = ASSETS / "DepthuVideoConverter.iconset"
         if iconset.exists():
             shutil.rmtree(iconset)
         iconset.mkdir()

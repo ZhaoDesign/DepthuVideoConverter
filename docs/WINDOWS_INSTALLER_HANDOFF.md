@@ -4,7 +4,7 @@ This note records the Windows customer installer work so another machine or agen
 
 ## Current Goal
 
-Ship a customer-friendly Windows 64-bit installer for Contour Control Tool:
+Ship a customer-friendly Windows 64-bit installer for DepthuVideoConverter:
 
 1. A normal installation wizard with install-location selection.
 2. A native desktop application window, not a browser or Gradio page.
@@ -27,9 +27,9 @@ macOS parity is prepared at the packaging-file level, but macOS packaging has no
   - Progress bar, log panel, open-output buttons.
   - Runs conversion in a background Qt worker thread.
 
-- Updated `packaging/windows-web-installer/ContourControlToolSetup.iss`
+- Updated `packaging/windows-web-installer/DepthuVideoConverterSetup.iss`
   - Launch shortcuts now run `desktop_qt_app.py` with `pythonw.exe`.
-  - Default install location is per-user: `%LOCALAPPDATA%\Programs\Contour Control Tool`.
+  - Default install location is per-user: `%LOCALAPPDATA%\Programs\DepthuVideoConverter`.
   - The user can still choose a custom path, including paths with spaces.
   - Runtime install runs hidden inside the installer, so customers do not see a PowerShell window.
   - Chinese installer text is added for the main wizard steps.
@@ -68,7 +68,7 @@ The chosen release path:
 1. Publish a small Inno Setup `.exe`.
 2. Include app source, assets, and installer scripts.
 3. During installation, download Python 3.11 embeddable runtime and locked CPU dependencies.
-4. Download Depth Anything V2 model files only on first use into `%LOCALAPPDATA%\DepthVideoConverter\models`.
+4. Download Depth Anything V2 model files only on first use into `%LOCALAPPDATA%\DepthuVideoConverter\models`.
 
 This keeps the GitHub Release installer around a few MB. First install still needs internet and downloads roughly hundreds of MB of runtime packages, mainly PyTorch, MKL, PySide6, OpenCV, and bundled FFmpeg.
 
@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.p
 Expected output:
 
 ```text
-dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
+dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
 ## Verification Done On 2026-08-01
@@ -91,7 +91,7 @@ dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
 Windows installer build:
 
 ```text
-ContourControlTool-Windows-x64-WebSetup.exe
+DepthuVideoConverter-Windows-x64-WebSetup.exe
 Size: 2,213,342 bytes
 SHA256: E6E350EB86A59C3336107C6DE86A2B54CDAB4A0C6E024A1310386F56E83F1318
 ```
@@ -106,7 +106,7 @@ Dependency wheel check:
 Install test:
 
 ```text
-Install path: E:\Contour Control Tool Native Test
+Install path: E:\DepthuVideoConverter Native Test
 Runtime path: %LOCALAPPDATA%\CCT\rt311cpu
 Runtime marker: runtime_version=2026.08.01-native-ui.2
 Installer result: Installation process succeeded
@@ -129,7 +129,7 @@ desktop_qt_app.ContourControlWindow: OK
 Native window creation test:
 
 ```text
-Window title: 视频深度控制图工具
+Window title: DepthuVideoConverter
 Window class: ContourControlWindow
 Model choices loaded: 3
 ```
@@ -137,10 +137,10 @@ Model choices loaded: 3
 Shortcut test:
 
 ```text
-Desktop launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\Contour Control Tool Native Test\app\desktop_qt_app.py"
-Desktop uninstall: E:\Contour Control Tool Native Test\unins000.exe
-Start Menu launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\Contour Control Tool Native Test\app\desktop_qt_app.py"
-Start Menu uninstall: E:\Contour Control Tool Native Test\unins000.exe
+Desktop launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
+Desktop uninstall: E:\DepthuVideoConverter Native Test\unins000.exe
+Start Menu launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
+Start Menu uninstall: E:\DepthuVideoConverter Native Test\unins000.exe
 ```
 
 ## Customer Requirements
@@ -155,7 +155,7 @@ Start Menu uninstall: E:\Contour Control Tool Native Test\unins000.exe
 If installation fails, collect:
 
 ```text
-%LOCALAPPDATA%\DepthVideoConverter\installer.log
+%LOCALAPPDATA%\DepthuVideoConverter\installer.log
 ```
 
 The installer log from Inno Setup is available only when run with `/LOG=...`.
@@ -170,7 +170,7 @@ Common failure points:
 ## Release Notes Draft
 
 ```markdown
-Windows x64 native desktop installer for Contour Control Tool.
+Windows x64 native desktop installer for DepthuVideoConverter.
 
 - Native desktop app: no browser, no Gradio page.
 - Normal installer wizard with install-location selection.
@@ -190,7 +190,7 @@ Requirements:
 
 Troubleshooting:
 
-If installation fails, send `%LOCALAPPDATA%\DepthVideoConverter\installer.log`.
+If installation fails, send `%LOCALAPPDATA%\DepthuVideoConverter\installer.log`.
 ```
 
 ## Next Mac Step

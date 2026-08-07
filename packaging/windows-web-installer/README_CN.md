@@ -6,8 +6,8 @@
 
 ## 用户安装后的效果
 
-- 桌面快捷方式：`视频深度控制图工具`
-- 开始菜单快捷方式：`视频深度控制图工具`
+- 桌面快捷方式：`DepthuVideoConverter`
+- 开始菜单快捷方式：`DepthuVideoConverter`
 - 卸载入口：Windows“设置 > 应用”或控制面板
 - 启动后是 PySide6 原生桌面窗口，不再是 Gradio 浏览器页面
 
@@ -16,7 +16,7 @@
 应用文件安装到用户在向导里选择的位置。默认位置：
 
 ```text
-%LOCALAPPDATA%\Programs\Contour Control Tool
+%LOCALAPPDATA%\Programs\DepthuVideoConverter
 ```
 
 Python 和大依赖固定安装到较短的用户目录，避免 PyTorch 在 Windows 默认长路径限制下失败：
@@ -28,7 +28,7 @@ Python 和大依赖固定安装到较短的用户目录，避免 PyTorch 在 Win
 Depth Anything V2 模型文件不进入安装包，首次使用对应模型时下载到：
 
 ```text
-%LOCALAPPDATA%\DepthVideoConverter\models
+%LOCALAPPDATA%\DepthuVideoConverter\models
 ```
 
 ## 构建
@@ -42,7 +42,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.p
 输出文件：
 
 ```text
-dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
+dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
 ## 验证重点
@@ -50,7 +50,7 @@ dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
 建议在干净 Windows 64 位电脑或虚拟机上测试：
 
 1. 双击安装包，确认是正常安装向导。
-2. 选择一个带空格的安装目录，例如 `E:\Contour Control Tool Native Test`。
+2. 选择一个带空格的安装目录，例如 `E:\DepthuVideoConverter Native Test`。
 3. 等待运行环境下载和安装完成。
 4. 确认安装完成后不要求重启。
 5. 确认桌面和开始菜单都有启动/卸载快捷方式。
@@ -61,7 +61,7 @@ dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
 如果安装失败，让客户提供：
 
 ```text
-%LOCALAPPDATA%\DepthVideoConverter\installer.log
+%LOCALAPPDATA%\DepthuVideoConverter\installer.log
 ```
 
 ## 当前方案取舍

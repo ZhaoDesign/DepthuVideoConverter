@@ -1,4 +1,4 @@
-"""FastAPI sidecar — REST API for the Depth Video Converter desktop shell.
+"""FastAPI sidecar — REST API for the DepthuVideoConverter desktop shell.
 
 Run:  python -m server.main
 Port: DEPTH_SERVER_PORT env var (default 9876), bound to 127.0.0.1 only.
@@ -32,7 +32,7 @@ from depth_converter import (
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Depth Video Converter API",
+    title="DepthuVideoConverter API",
     version="2.0.0",
     docs_url=None,          # No public docs needed
     redoc_url=None,
@@ -187,7 +187,7 @@ def main() -> None:
     port = int(os.environ.get("DEPTH_SERVER_PORT", "9876"))
 
     print("=" * 58)
-    print("  Depth Video Converter — FastAPI Sidecar")
+    print("  DepthuVideoConverter — FastAPI Sidecar")
     print("=" * 58)
     device_str, device_desc = detect_device()
     print(f"  Detected device : {device_desc}")

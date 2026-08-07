@@ -17,12 +17,14 @@ def main() -> None:
 
     modules = {
         "onnxruntime": "onnxruntime",
+        "torch": "torch",
         "cv2": "cv2",
         "numpy": "numpy",
         "imageio_ffmpeg": "imageio_ffmpeg",
         "PySide6": "PySide6",
         "QtMultimedia": "PySide6.QtMultimedia",
         "QtMultimediaWidgets": "PySide6.QtMultimediaWidgets",
+        "DepthAnythingV2": "depth_anything_v2",
     }
     versions: dict[str, str] = {}
     for label, module_name in modules.items():

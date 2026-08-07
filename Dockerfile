@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# Depth Video Converter — Docker image
+# DepthuVideoConverter — Docker image
 #
 # Build:  docker build -t depth-video-converter .
 # Run:    docker compose up

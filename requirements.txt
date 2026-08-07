@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# Contour Control Tool — Python dependencies
+# DepthuVideoConverter — Python dependencies
 #
 # Install:  pip install -r requirements.txt
 # ------------------------------------------------------------------
@@ -15,6 +15,7 @@ PySide6-Addons>=6.7,<6.8
 
 # --- Deep-learning runtime ---
 onnxruntime>=1.17
+torch>=2.2,<3.0; platform_system == "Darwin"
 
 # --- Image / video processing ---
 opencv-python>=4.8

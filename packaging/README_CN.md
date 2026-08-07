@@ -1,17 +1,17 @@
-# 视频深度控制图工具打包说明
+# DepthuVideoConverter打包说明
 
 当前推荐给客户发布的是 Windows x64 原生桌面安装器：
 
 ```text
-ContourControlTool-Windows-x64-WebSetup.exe
+DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
 它是小体积联网安装器：安装包只放应用代码、图标和安装脚本，首次安装时再下载 Python、PyTorch、PySide6、OpenCV 和 FFmpeg 运行环境。模型文件也不进入安装包，首次选择模型时下载到用户数据目录。
 
 模型缓存位置：
 
-- Windows：`%LOCALAPPDATA%\DepthVideoConverter\models`
-- macOS：`~/Library/Application Support/DepthVideoConverter/models`
+- Windows：`%LOCALAPPDATA%\DepthuVideoConverter\models`
+- macOS：`~/Library/Application Support/DepthuVideoConverter/models`
 
 ## Windows x64 原生桌面安装器
 
@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.p
 输出：
 
 ```text
-dist\windows-installer\ContourControlTool-Windows-x64-WebSetup.exe
+dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
 安装后的客户体验：

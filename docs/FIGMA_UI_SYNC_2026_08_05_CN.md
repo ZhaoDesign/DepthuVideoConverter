@@ -19,8 +19,8 @@
   - 新增：`icon-check-dark.png`、`icon-chevron-right.png`、`icon-fullscreen.png`。
   - `icon-volume-muted.png` 使用 Figma 音量图标派生，保持同一视觉风格。
 
-- `packaging/windows-web-installer/ContourControlToolSetup.iss`
-- `packaging/windows-offline-installer/ContourControlToolSetup.iss`
+- `packaging/windows-web-installer/DepthuVideoConverterSetup.iss`
+- `packaging/windows-offline-installer/DepthuVideoConverterSetup.iss`
   - 补齐新增图标资产，确保 Windows 安装包也能显示完整 UI。
 
 ## 验证
@@ -41,7 +41,7 @@
 macOS WebSetup 安装包使用：
 
 ```bash
-cd /Users/xmiles/Desktop/contour-control-tool
+cd /Users/xmiles/Desktop/DepthuVideoConverter
 zsh packaging/build_macos_web_installer.sh
 ```
 
@@ -53,5 +53,5 @@ zsh packaging/build_macos_web_installer.sh
 
 主要输出文件：
 
-- `ContourControlTool-macOS-WebSetup.dmg`
-- `ContourControlTool-macOS-WebSetup.zip`
+- `DepthuVideoConverter-macOS-WebSetup.dmg`
+- `DepthuVideoConverter-macOS-WebSetup.zip`

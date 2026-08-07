@@ -1,5 +1,5 @@
-#define MyAppName "视频深度控制图工具"
-#define MyAppEnglishName "Contour Control Tool"
+#define MyAppName "DepthuVideoConverter"
+#define MyAppEnglishName "DepthuVideoConverter"
 #define MyAppPublisher "ZhaoDesign"
 #define MyAppVersion GetEnv("APP_VERSION")
 #if MyAppVersion == ""
@@ -13,9 +13,9 @@ AppId={{8E32A2D1-F74A-4B6C-A9D5-3F8B56C0FD22}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/ZhaoDesign/contour-control-tool
-AppSupportURL=https://github.com/ZhaoDesign/contour-control-tool/issues
-DefaultDirName={localappdata}\Programs\Contour Control Tool
+AppPublisherURL=https://github.com/ZhaoDesign/DepthuVideoConverter
+AppSupportURL=https://github.com/ZhaoDesign/DepthuVideoConverter/issues
+DefaultDirName={localappdata}\Programs\DepthuVideoConverter
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
@@ -26,7 +26,7 @@ WizardImageFile=..\..\assets\installer-banner.bmp
 WizardSmallImageFile=..\..\assets\installer-small.bmp
 UninstallDisplayIcon={app}\assets\contour-control-tool.ico
 OutputDir=..\..\dist\windows-installer
-OutputBaseFilename=ContourControlTool-Windows-x64-OfflineSetup
+OutputBaseFilename=DepthuVideoConverter-Windows-x64-OfflineSetup
 Compression=lzma2/fast
 SolidCompression=no
 WizardStyle=modern
@@ -86,7 +86,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 ; Pre-built Python runtime (bundled offline)
 Source: "..\..\build\runtime\*"; DestDir: "{localappdata}\CCT\rt311cpu"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: ShouldInstallRuntime
 ; Bundled ONNX model (Small) — no download needed on first run
-Source: "..\..\build\models\depth_anything_v2_vits.onnx"; DestDir: "{localappdata}\DepthVideoConverter\models"; Flags: ignoreversion
+Source: "..\..\build\models\depth_anything_v2_vits.onnx"; DestDir: "{localappdata}\DepthuVideoConverter\models"; Flags: ignoreversion
 ; Application source
 Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
 Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion

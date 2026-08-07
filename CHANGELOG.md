@@ -58,7 +58,7 @@
 | `depth_converter/core.py` | 移除 torch 引用，改用 infer_depth() |
 | `depth_converter/__init__.py` | 导出 infer_depth、MODELS_DIR |
 | `requirements.txt` | torch→onnxruntime, PySide6→PySide6-Essentials |
-| `packaging/windows-offline-installer/ContourControlToolSetup.iss` | 新增离线安装包 Inno Setup 脚本 |
+| `packaging/windows-offline-installer/DepthuVideoConverterSetup.iss` | 新增离线安装包 Inno Setup 脚本 |
 | `packaging/build_windows_offline_installer.ps1` | 新增离线构建脚本（下载Python+pip install+ISCC编译） |
 | `packaging/windows-web-installer/runtime-requirements-cpu.txt` | 精简到 6 个依赖（原 21 个） |
 | `packaging/generate_icon.py` | 图标强调色 + 安装向导品牌图片生成 |
@@ -66,7 +66,7 @@
 | `depth_anything_v2/dpt.py` | 内联 Compose 类替代 torchvision 导入 |
 
 ## 安装说明
-1. 下载 `ContourControlTool-Windows-x64-OfflineSetup.exe`
+1. 下载 `DepthuVideoConverter-Windows-x64-OfflineSetup.exe`
 2. 双击运行，按提示安装（无需联网，无需管理员权限）
 3. 安装完成后从桌面快捷方式启动
 4. 首次使用直接拖入视频即可转换（Small 模型已内置）

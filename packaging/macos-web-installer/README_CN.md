@@ -18,12 +18,12 @@
 - uv 运行时引导工具
 - Python 3.11
 - PySide6 原生桌面界面
-- PyTorch / TorchVision
+- PyTorch（Apple MPS 推理）
 - OpenCV、NumPy、imageio-ffmpeg
 
 模型文件不进入安装包，首次在界面选择模型时再下载到：
 
-`~/Library/Application Support/DepthVideoConverter/models`
+`~/Library/Application Support/DepthuVideoConverter/models`
 
 ## 运行环境位置
 
@@ -43,8 +43,8 @@ zsh packaging/build_macos_web_installer.sh /path/to/output
 
 输出文件：
 
-- `ContourControlTool-macOS-WebSetup.zip`
-- `ContourControlTool-macOS-WebSetup.dmg`
+- `DepthuVideoConverter-macOS-WebSetup.zip`
+- `DepthuVideoConverter-macOS-WebSetup.dmg`
 
 ## 客户要求
 
@@ -57,4 +57,4 @@ zsh packaging/build_macos_web_installer.sh /path/to/output
 - 这是 macOS 通用联网安装器
 - 首次启动会自动准备 Python 和依赖
 - 当前原生 UI 版本需在 Mac 上验证后再发布
-- 如果安装失败，请把 `~/Library/Application Support/DepthVideoConverter/installer.log` 发回来
+- 如果安装失败，请把 `~/Library/Application Support/DepthuVideoConverter/installer.log` 发回来
