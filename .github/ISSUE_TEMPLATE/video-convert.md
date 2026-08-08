@@ -4,7 +4,9 @@ about: Upload a video for the free GitHub queue worker
 title: "[queue] "
 ---
 
-Use this template for one video job.
+Use this template for one video job. The easier entry is the drag-and-drop page:
+
+https://zhaodesign.github.io/DepthuVideoConverter/
 
 1. Keep the queue block below.
 2. Leave `source=attachment` if you drag a video into the issue body.
