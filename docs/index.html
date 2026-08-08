@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contour Control Tool Queue</title>
+  <link rel="stylesheet" href="./queue.css">
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">GitHub Pages + Actions</p>
+        <h1>Contour Control Tool Queue</h1>
+        <p class="lede">
+          Free public queue for MP4 / MOV depth conversion.
+          Submit a GitHub issue with one small attachment or a public HTTPS video URL, then wait for the Actions job to finish.
+        </p>
+      </div>
+      <div class="hero-meta">
+        <a class="button primary" id="open-template" href="https://github.com/ZhaoDesign/DepthuVideoConverter/issues/new?template=video-convert.md">Open issue template</a>
+        <button class="button" id="copy-block" type="button">Copy queue block</button>
+      </div>
+    </header>
+
+    <section class="band">
+      <div class="band-head">
+        <h2>Current queue</h2>
+        <p id="queue-status">Loading from GitHub...</p>
+      </div>
+      <div id="queue-list" class="queue-list"></div>
+    </section>
+
+    <section class="band">
+      <div class="band-head">
+        <h2>Issue block</h2>
+        <p>Keep this block in the issue body. Change only the values you need.</p>
+      </div>
+      <pre id="queue-block" class="code-block">```queue
+source=attachment
+model=Small (fastest, ~99 MB)
+resolution=Original
+invert=false
+smoothing=60
+preserve_audio=true
+```</pre>
+    </section>
+
+    <section class="band">
+      <div class="band-head">
+        <h2>How it works</h2>
+      </div>
+      <ol class="steps">
+        <li>Open the issue template.</li>
+        <li>Attach one small MP4 or MOV, or paste a public HTTPS video URL.</li>
+        <li>GitHub Actions processes tasks one at a time and uploads the result as a 7-day artifact.</li>
+      </ol>
+    </section>
+  </main>
+
+  <script>
+    window.__QUEUE_REPO__ = "ZhaoDesign/DepthuVideoConverter";
+  </script>
+  <script src="./queue.js"></script>
+</body>
+</html>

@@ -11,6 +11,8 @@ venv/
 
 # Model checkpoint files (too large for git)
 models/*.pth
+models/*.onnx
+queue-output/
 
 # macOS
 .DS_Store

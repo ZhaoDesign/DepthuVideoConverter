@@ -1,0 +1,6 @@
+# Minimal runtime for the GitHub free queue worker.
+# Keep this lean so Actions installs quickly.
+numpy>=1.24
+opencv-python-headless>=4.8
+onnxruntime>=1.17
+imageio-ffmpeg>=0.6

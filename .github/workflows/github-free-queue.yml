@@ -1,0 +1,54 @@
+name: GitHub Free Queue
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: github-free-queue
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'queue-video') || contains(github.event.issue.title, '[queue]') || contains(github.event.issue.body, '```queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore model cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: contour-control-models-${{ runner.os }}-${{ hashFiles('depth_converter/models.py') }}
+          restore-keys: |
+            contour-control-models-${{ runner.os }}-
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-github-actions.txt
+
+      - name: Run queue worker
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/github_free_queue_worker.py --issue-number ${{ github.event.issue.number }}
+
+      - name: Upload result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: queue-output-issue-${{ github.event.issue.number }}
+          path: queue-output/issue-${{ github.event.issue.number }}
+          if-no-files-found: error
+          retention-days: 7
