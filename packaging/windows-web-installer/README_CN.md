@@ -22,7 +22,7 @@
 Python 和大依赖固定安装到较短的用户目录，避免 PyTorch 在 Windows 默认长路径限制下失败：
 
 ```text
-%LOCALAPPDATA%\CCT\rt311cpu
+%LOCALAPPDATA%\CCT\rt311cuda
 ```
 
 Depth Anything V2 模型文件不进入安装包，首次使用对应模型时下载到：
@@ -43,6 +43,20 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.p
 
 ```text
 dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
+```
+
+CUDA 离线版构建：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.08.1
+```
+
+离线版会输出三个文件，下载后必须放在同一个文件夹，再运行主 `.exe`：
+
+```text
+DepthuVideoConverter-Windows-x64-OfflineSetup.exe
+DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
+DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
 ```
 
 ## 验证重点
@@ -68,5 +82,5 @@ dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 
 - 安装包体积小，适合上传 GitHub Release 和发给客户。
 - 首次安装必须联网，下载量主要来自 PyTorch、MKL、PySide6、OpenCV 和内置 FFmpeg。
-- 默认是 CPU 运行时，兼容性优先，速度会比 GPU 版本慢。
+- 有 NVIDIA GPU 时默认使用 CUDA PyTorch；没有可用 CUDA 时回退到 ONNX Runtime CPU。
 - macOS 相关文件已按原生 UI 方向准备，但需要在 Mac 上单独构建和验证后再发布。

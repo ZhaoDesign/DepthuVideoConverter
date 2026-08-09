@@ -106,16 +106,16 @@ Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignorevers
 Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "install_runtime.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
-Source: "runtime-requirements-cpu.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "runtime-requirements-cuda.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install_runtime.ps1"" -InstallDir ""{app}"""; StatusMsg: "正在联网下载并安装运行环境，首次安装可能需要几分钟..."; Flags: waituntilterminated runhidden
-Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked; Check: RuntimeAlreadyInstalled
+Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked; Check: RuntimeAlreadyInstalled
 
 [InstallDelete]
 Type: files; Name: "{group}\{#MyAppName}.lnk"
@@ -130,6 +130,7 @@ Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\installer"
 Type: filesandordirs; Name: "{localappdata}\CCT\rt311cpu"
+Type: filesandordirs; Name: "{localappdata}\CCT\rt311cuda"
 Type: dirifempty; Name: "{localappdata}\CCT"
 
 [Code]
@@ -137,8 +138,8 @@ function RuntimeAlreadyInstalled: Boolean;
 var
   MarkerPath: String;
 begin
-  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok');
-  Result := FileExists(MarkerPath) and FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\pythonw.exe'));
+  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cuda\.runtime-cuda-ok');
+  Result := FileExists(MarkerPath) and FileExists(ExpandConstant('{localappdata}\CCT\rt311cuda\pythonw.exe'));
 end;
 
 function VCRedistInstalled: Boolean;
@@ -153,7 +154,7 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
-    MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok');
+    MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cuda\.runtime-cuda-ok');
     if not FileExists(MarkerPath) then
     begin
       MsgBox('运行环境安装未成功完成。可能原因：' + #13#10 +
@@ -184,7 +185,8 @@ begin
     '$procs = Get-CimInstance Win32_Process | Where-Object { ' +
     '$_.CommandLine -like ''*desktop_launcher.py*'' -or ' +
     '$_.CommandLine -like ''*desktop_qt_app.py*'' -or ' +
-    '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' ' +
+    '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' -or ' +
+    '$_.ExecutablePath -like ''*\\CCT\\rt311cuda\\pythonw.exe'' ' +
     '}; ' +
     'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }"';
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PowerShellArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);

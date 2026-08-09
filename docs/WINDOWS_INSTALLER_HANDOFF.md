@@ -10,7 +10,7 @@ Ship a customer-friendly Windows 64-bit installer for DepthuVideoConverter:
 2. A native desktop application window, not a browser or Gradio page.
 3. Small GitHub Release asset size by downloading the heavy runtime during installation.
 4. Start Menu and desktop launch shortcuts.
-5. Start Menu and desktop quick uninstall shortcuts.
+5. No desktop or Start Menu uninstall shortcut.
 6. No restart prompt after a successful install.
 
 macOS parity is prepared at the packaging-file level, but macOS packaging has not been verified from this Windows machine.
@@ -33,21 +33,21 @@ macOS parity is prepared at the packaging-file level, but macOS packaging has no
   - The user can still choose a custom path, including paths with spaces.
   - Runtime install runs hidden inside the installer, so customers do not see a PowerShell window.
   - Chinese installer text is added for the main wizard steps.
-  - Start Menu and desktop uninstall shortcuts are created.
-  - Old English uninstall shortcuts are removed during upgrades.
+  - Uninstall remains available from Windows Settings / Control Panel.
+  - Legacy desktop and Start Menu uninstall shortcuts are removed during upgrades.
   - Restart prompts are disabled for the runtime install step.
 
 - Updated `packaging/windows-web-installer/install_runtime.ps1`
-  - Runtime marker now includes `runtime_version=2026.08.01-native-ui.2`.
+  - Runtime marker now includes `runtime_version=2026.08.08-cuda`.
   - Changing the runtime marker forces older browser-runtime installs to reinstall with PySide6.
   - Child Python/pip arguments are quoted so install paths with spaces work.
   - pip dependency install uses retries, longer timeouts, and resume retries.
-  - Runtime installs to `%LOCALAPPDATA%\CCT\rt311cpu` to avoid Windows long-path failures in PyTorch.
+  - Runtime installs to `%LOCALAPPDATA%\CCT\rt311cuda` to avoid Windows long-path failures in PyTorch.
 
-- Updated `packaging/windows-web-installer/runtime-requirements-cpu.txt`
+- Updated `packaging/windows-web-installer/runtime-requirements-cuda.txt`
   - Removed Gradio/FastAPI/Starlette/browser-server dependencies from the Windows customer runtime.
   - Keeps only native UI and video-processing dependencies:
-    PySide6, PyTorch CPU, TorchVision CPU, OpenCV headless, NumPy, imageio-ffmpeg, and pinned transitive runtime packages.
+    PySide6, CUDA PyTorch, ONNX Runtime fallback, OpenCV headless, NumPy, imageio-ffmpeg, and pinned runtime packages.
 
 - Updated `packaging/windows-web-installer/verify_runtime.py`
   - Verifies native runtime imports.
@@ -63,14 +63,15 @@ macOS parity is prepared at the packaging-file level, but macOS packaging has no
 
 The old portable package was too large because it bundled Python, PyTorch, and all packages directly. The app source is small; the heavy parts are the runtime and model files.
 
-The chosen release path:
+The chosen release paths:
 
-1. Publish a small Inno Setup `.exe`.
-2. Include app source, assets, and installer scripts.
-3. During installation, download Python 3.11 embeddable runtime and locked CPU dependencies.
-4. Download Depth Anything V2 model files only on first use into `%LOCALAPPDATA%\DepthuVideoConverter\models`.
+1. Publish a small online Inno Setup `.exe`.
+2. Publish an offline CUDA package as one launcher `.exe` plus two `.bin` slices.
+3. Include app source, assets, and installer scripts.
+4. The online installer downloads Python 3.11 and locked CUDA PyTorch dependencies during setup.
+5. The offline package includes the CUDA runtime and the Small model.
 
-This keeps the GitHub Release installer around a few MB. First install still needs internet and downloads roughly hundreds of MB of runtime packages, mainly PyTorch, MKL, PySide6, OpenCV, and bundled FFmpeg.
+The online installer remains a few MB. The offline package is split so each GitHub Release asset stays below the single-file upload limit; keep all three offline files in the same folder before running the `.exe`.
 
 ## Build Command
 
@@ -86,7 +87,20 @@ Expected output:
 dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
-## Verification Done On 2026-08-01
+Offline build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.08.1
+```
+
+Expected offline files:
+
+```text
+dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup.exe
+dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
+dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
+```
+## Verification Done On 2026-08-08
 
 Windows installer build:
 
@@ -96,19 +110,12 @@ Size: 2,213,342 bytes
 SHA256: E6E350EB86A59C3336107C6DE86A2B54CDAB4A0C6E024A1310386F56E83F1318
 ```
 
-Dependency wheel check:
-
-- Windows x64, Python 3.11 wheel download succeeded.
-- 21 wheels resolved.
-- Total wheel download size was about 692 MB.
-- No Gradio/FastAPI/Starlette packages are required by the native runtime.
-
 Install test:
 
 ```text
 Install path: E:\DepthuVideoConverter Native Test
-Runtime path: %LOCALAPPDATA%\CCT\rt311cpu
-Runtime marker: runtime_version=2026.08.01-native-ui.2
+Runtime path: %LOCALAPPDATA%\CCT\rt311cuda
+Runtime marker: runtime_version=2026.08.08-cuda
 Installer result: Installation process succeeded
 Runtime install exit code: 0
 Need to restart Windows? No
@@ -117,8 +124,8 @@ Need to restart Windows? No
 Runtime smoke test:
 
 ```text
-torch: 2.3.1+cpu
-torchvision: 0.18.1+cpu
+torch: 2.13.0+cu126
+torch.cuda: available on supported NVIDIA systems
 cv2: 4.10.0
 numpy: 1.26.4
 imageio_ffmpeg: 0.6.0
@@ -137,18 +144,18 @@ Model choices loaded: 3
 Shortcut test:
 
 ```text
-Desktop launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
-Desktop uninstall: E:\DepthuVideoConverter Native Test\unins000.exe
-Start Menu launch: %LOCALAPPDATA%\CCT\rt311cpu\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
-Start Menu uninstall: E:\DepthuVideoConverter Native Test\unins000.exe
+Desktop launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
+Start Menu launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
+Desktop / Start Menu uninstall shortcuts: not created
 ```
 
 ## Customer Requirements
 
 - Windows 64-bit.
-- Internet access during installation.
-- Internet access on first model use.
-- CPU runtime is the default for compatibility; processing is slower than a GPU build.
+- Online installer: internet access during installation.
+- Online installer: internet access on first Base/Large model use.
+- Offline installer: no internet required during installation or Small model use.
+- CUDA PyTorch is preferred when an NVIDIA GPU is available; ONNX Runtime remains the CPU fallback.
 
 ## Troubleshooting
 
@@ -175,18 +182,19 @@ Windows x64 native desktop installer for DepthuVideoConverter.
 - Native desktop app: no browser, no Gradio page.
 - Normal installer wizard with install-location selection.
 - Small installer asset; Python/PyTorch/PySide6 runtime downloads during installation.
-- Uses CPU PyTorch runtime for broad Windows compatibility.
+- Uses CUDA PyTorch on supported NVIDIA systems, with ONNX Runtime CPU fallback.
 - Creates desktop and Start Menu launch shortcuts.
-- Creates desktop and Start Menu uninstall shortcuts.
+- Does not create desktop or Start Menu uninstall shortcuts.
 - Fixed install paths with spaces.
 - Fixed restart prompt after successful installation.
 - Runtime packages are pinned and verified for Windows x64 Python 3.11.
+- Offline CUDA package is split into one `.exe` and two `.bin` files; keep them together.
 
 Requirements:
 
 - Windows 64-bit
-- Internet access during installation
-- Internet access on first model use
+- Online installer: internet access during installation
+- Offline installer: no internet required during installation or Small model use
 
 Troubleshooting:
 

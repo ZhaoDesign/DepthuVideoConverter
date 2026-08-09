@@ -14,10 +14,17 @@ catch {
 }
 
 $PythonVersion = "3.11.9"
-$RuntimeVersion = "2026.08.02-onnx"
+$RuntimeVersion = "2026.08.08-cuda"
 $PythonZipName = "python-$PythonVersion-embed-amd64.zip"
 $PythonZipUrl = "https://www.python.org/ftp/python/$PythonVersion/$PythonZipName"
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
+$TorchWheelName = "torch-2.13.0+cu126-cp311-cp311-win_amd64.whl"
+$TorchWheelUrls = @(
+    "https://download-r2.pytorch.org/whl/cu126/torch-2.13.0%2Bcu126-cp311-cp311-win_amd64.whl",
+    "https://download.pytorch.org/whl/cu126/torch-2.13.0%2Bcu126-cp311-cp311-win_amd64.whl"
+)
+$TorchWheelLength = 2594548547
+$TorchWheelSha256 = "8095729db14e7fd5178a39676fdd679208eff4041407ea34e3d898336c90f5c5"
 
 $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 $InstallerDir = Join-Path $InstallDir "installer"
@@ -32,9 +39,9 @@ else {
     $DataDir = $LegacyDataDir
 }
 $RuntimeRoot = Join-Path $env:LOCALAPPDATA "CCT"
-$RuntimeDir = Join-Path $RuntimeRoot "rt311cpu"
+$RuntimeDir = Join-Path $RuntimeRoot "rt311cuda"
 $LogPath = Join-Path $DataDir "installer.log"
-$MarkerPath = Join-Path $RuntimeDir ".runtime-cpu-ok"
+$MarkerPath = Join-Path $RuntimeDir ".runtime-cuda-ok"
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
@@ -71,6 +78,63 @@ function Invoke-Download {
     }
 
     Move-Item -LiteralPath $tmp -Destination $Destination -Force
+}
+
+function Test-DownloadedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][long]$ExpectedLength,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    $length = (Get-Item -LiteralPath $Path).Length
+    if ($length -ne $ExpectedLength) {
+        return $false
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash
+    return $hash.Equals($ExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Invoke-ResumableDownload {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Urls,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][long]$ExpectedLength,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256
+    )
+
+    if (Test-DownloadedFile -Path $Destination -ExpectedLength $ExpectedLength -ExpectedSha256 $ExpectedSha256) {
+        Write-Log "Using verified cached wheel: $Destination"
+        return
+    }
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Force
+    }
+
+    $partial = "$Destination.part"
+    foreach ($url in $Urls) {
+        for ($attempt = 1; $attempt -le 10; $attempt++) {
+            Write-Log ("Downloading CUDA PyTorch wheel (attempt {0}/10): {1}" -f $attempt, $url)
+            & curl.exe -L --fail --retry 3 --retry-delay 5 --retry-all-errors --continue-at - -o $partial $url
+            if (Test-DownloadedFile -Path $partial -ExpectedLength $ExpectedLength -ExpectedSha256 $ExpectedSha256) {
+                Move-Item -LiteralPath $partial -Destination $Destination -Force
+                Write-Log "CUDA PyTorch wheel download and hash verification completed."
+                return
+            }
+            if (Test-Path -LiteralPath $partial) {
+                $partialLength = (Get-Item -LiteralPath $partial).Length
+                if ($partialLength -gt $ExpectedLength) {
+                    Remove-Item -LiteralPath $partial -Force
+                }
+            }
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    throw "CUDA PyTorch wheel download failed or hash verification failed."
 }
 
 function Invoke-Step {
@@ -245,9 +309,41 @@ try {
         }
     }
 
-    $requirements = Join-Path $InstallerDir "runtime-requirements-cpu.txt"
-    Invoke-Step "Install application dependencies (CPU runtime)" {
-        $code = Invoke-LoggedProcessWithRetry -FileName $pythonExe -Arguments @("-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--no-warn-script-location", "--retries", "10", "--timeout", "120", "--resume-retries", "10", "-r", $requirements) -Attempts 3 -DelaySeconds 15
+    $torchWheel = Join-Path $CacheDir $TorchWheelName
+    Invoke-Step "Download CUDA PyTorch wheel with resume support" {
+        Invoke-ResumableDownload -Urls $TorchWheelUrls -Destination $torchWheel -ExpectedLength $TorchWheelLength -ExpectedSha256 $TorchWheelSha256
+    }
+
+    Invoke-Step "Install CUDA PyTorch wheel" {
+        $code = Invoke-LoggedProcessWithRetry -FileName $pythonExe -Arguments @(
+            "-m", "pip", "install",
+            "--no-compile",
+            "--disable-pip-version-check",
+            "--no-warn-script-location",
+            "--index-url", "https://download.pytorch.org/whl/cu126",
+            "--extra-index-url", "https://pypi.tuna.tsinghua.edu.cn/simple",
+            $torchWheel
+        ) -Attempts 3 -DelaySeconds 15
+        if ($code -ne 0) {
+            throw "CUDA PyTorch installation failed."
+        }
+    }
+
+    $requirements = Join-Path $InstallerDir "runtime-requirements-cuda.txt"
+    Invoke-Step "Install application dependencies (CUDA PyTorch runtime)" {
+        $code = Invoke-LoggedProcessWithRetry -FileName $pythonExe -Arguments @(
+            "-m", "pip", "install",
+            "--no-cache-dir",
+            "--no-compile",
+            "--disable-pip-version-check",
+            "--no-warn-script-location",
+            "--index-url", "https://download.pytorch.org/whl/cu126",
+            "--extra-index-url", "https://pypi.tuna.tsinghua.edu.cn/simple",
+            "--retries", "10",
+            "--timeout", "120",
+            "--resume-retries", "10",
+            "-r", $requirements
+        ) -Attempts 3 -DelaySeconds 15
         if ($code -ne 0) {
             throw "Dependency installation failed."
         }

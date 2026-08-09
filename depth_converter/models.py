@@ -1,7 +1,8 @@
 """Model loading, checkpoint management, and device detection.
 
-macOS uses the original PyTorch + MPS Depth Anything V2 path.
-Other platforms keep the existing ONNX Runtime path.
+Windows prefers CUDA-enabled PyTorch when an NVIDIA GPU is available and
+falls back to the existing ONNX Runtime CPU path otherwise. macOS keeps the
+original PyTorch + MPS path.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import gc
 import importlib
 import os
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 import urllib.request
@@ -34,13 +36,27 @@ def _model_urls(repo: str, filename: str) -> list[str]:
     ]
 
 
+@lru_cache(maxsize=1)
 def _selected_backend() -> str:
     override = os.environ.get("DEPTH_BACKEND", "").strip().lower()
     if override in {"torch", "pytorch"}:
         return "torch"
     if override in {"onnx", "ort"}:
         return "onnx"
-    return "torch" if sys.platform == "darwin" else "onnx"
+    if sys.platform == "darwin":
+        return "torch"
+    if sys.platform == "win32" and _torch_cuda_available():
+        return "torch"
+    return "onnx"
+
+
+def _torch_cuda_available() -> bool:
+    """Return whether CUDA-enabled PyTorch can be imported and sees a GPU."""
+    try:
+        torch = importlib.import_module("torch")
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
 
 
 def _torch_model_defs() -> Dict[str, dict]:

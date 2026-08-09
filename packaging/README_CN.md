@@ -6,7 +6,17 @@
 DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
-它是小体积联网安装器：安装包只放应用代码、图标和安装脚本，首次安装时再下载 Python、PyTorch、PySide6、OpenCV 和 FFmpeg 运行环境。模型文件也不进入安装包，首次选择模型时下载到用户数据目录。
+联网版是小体积安装器：安装包只放应用代码、图标和安装脚本，首次安装时下载 Python、CUDA PyTorch、PySide6、OpenCV 和 FFmpeg 运行环境。模型文件也不进入联网包，首次选择 Base/Large 模型时下载到用户数据目录。
+
+同时提供 CUDA 离线版：
+
+```text
+DepthuVideoConverter-Windows-x64-OfflineSetup.exe
+DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
+DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
+```
+
+离线版包含 CUDA 运行时和 Small 模型。三个文件必须放在同一目录，再运行主 `.exe`。
 
 模型缓存位置：
 

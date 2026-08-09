@@ -14,7 +14,9 @@ PySide6-Essentials>=6.7,<6.8
 PySide6-Addons>=6.7,<6.8
 
 # --- Deep-learning runtime ---
+--extra-index-url https://download.pytorch.org/whl/cu126
 onnxruntime>=1.17
+torch==2.13.0+cu126; platform_system == "Windows"
 torch>=2.2,<3.0; platform_system == "Darwin"
 
 # --- Image / video processing ---

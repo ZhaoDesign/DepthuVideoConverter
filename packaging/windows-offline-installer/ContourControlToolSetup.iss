@@ -6,7 +6,7 @@
 #define MyAppVersion "0.1.0"
 #endif
 #define MyAppExeName "pythonw.exe"
-#define RuntimeVersion "2026.08.02-onnx"
+#define RuntimeVersion "2026.08.08-cuda"
 
 [Setup]
 AppId={{8E32A2D1-F74A-4B6C-A9D5-3F8B56C0FD22}
@@ -29,6 +29,8 @@ OutputDir=..\..\dist\windows-installer
 OutputBaseFilename=DepthuVideoConverter-Windows-x64-OfflineSetup
 Compression=lzma2/fast
 SolidCompression=no
+DiskSpanning=yes
+DiskSliceSize=1900000000
 WizardStyle=modern
 SetupLogging=yes
 UsePreviousAppDir=yes
@@ -84,9 +86,9 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 ; Pre-built Python runtime (bundled offline)
-Source: "..\..\build\runtime\*"; DestDir: "{localappdata}\CCT\rt311cpu"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: ShouldInstallRuntime
-; Bundled ONNX model (Small) — no download needed on first run
-Source: "..\..\build\models\depth_anything_v2_vits.onnx"; DestDir: "{localappdata}\DepthuVideoConverter\models"; Flags: ignoreversion
+Source: "..\..\build\runtime-cuda\*"; DestDir: "{localappdata}\CCT\rt311cuda"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: ShouldInstallRuntime
+; Bundled Small PyTorch model — no download needed on first run
+Source: "..\..\build\models\depth_anything_v2_vits.pth"; DestDir: "{localappdata}\DepthuVideoConverter\models"; Flags: ignoreversion
 ; Application source
 Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
 Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion
@@ -115,11 +117,11 @@ Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Fla
 Source: "..\windows-web-installer\verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\contour-control-tool.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{localappdata}\CCT\rt311cpu\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
+Filename: "{localappdata}\CCT\rt311cuda\{#MyAppExeName}"; Parameters: """{app}\app\desktop_qt_app.py"""; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
 
 [InstallDelete]
 Type: files; Name: "{group}\{#MyAppName}.lnk"
@@ -134,6 +136,7 @@ Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\installer"
 Type: filesandordirs; Name: "{localappdata}\CCT\rt311cpu"
+Type: filesandordirs; Name: "{localappdata}\CCT\rt311cuda"
 Type: dirifempty; Name: "{localappdata}\CCT"
 
 [Code]
@@ -147,16 +150,23 @@ begin
     '$procs = Get-CimInstance Win32_Process | Where-Object { ' +
     '$_.CommandLine -like ''*desktop_launcher.py*'' -or ' +
     '$_.CommandLine -like ''*desktop_qt_app.py*'' -or ' +
-    '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' ' +
+    '$_.ExecutablePath -like ''*\\CCT\\rt311cpu\\pythonw.exe'' -or ' +
+    '$_.ExecutablePath -like ''*\\CCT\\rt311cuda\\pythonw.exe'' ' +
     '}; ' +
     'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }"';
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PowerShellArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 function RuntimeAlreadyInstalled: Boolean;
+var
+  MarkerPath: String;
+  MarkerText: AnsiString;
 begin
-  Result := FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\pythonw.exe')) and
-            FileExists(ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok'));
+  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cuda\.runtime-cuda-ok');
+  Result := FileExists(ExpandConstant('{localappdata}\CCT\rt311cuda\pythonw.exe')) and
+            FileExists(MarkerPath) and
+            LoadStringFromFile(MarkerPath, MarkerText) and
+            (Pos('runtime_version={#RuntimeVersion}', MarkerText) > 0);
 end;
 
 function ShouldInstallRuntime: Boolean;
@@ -175,7 +185,7 @@ var
   MarkerPath: String;
   Content: String;
 begin
-  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cpu\.runtime-cpu-ok');
+  MarkerPath := ExpandConstant('{localappdata}\CCT\rt311cuda\.runtime-cuda-ok');
   Content := 'runtime_version={#RuntimeVersion}' + #13#10 + 'installed=' + GetDateTimeString('yyyy-mm-dd"T"hh:nn:ss', '-', ':');
   SaveStringToFile(MarkerPath, Content, False);
 end;

@@ -16,6 +16,7 @@ def main() -> None:
     sys.path.insert(0, str(app_dir))
 
     modules = {
+        "torch": "torch",
         "onnxruntime": "onnxruntime",
         "cv2": "cv2",
         "numpy": "numpy",
@@ -28,6 +29,13 @@ def main() -> None:
     for label, module_name in modules.items():
         module = importlib.import_module(module_name)
         versions[label] = str(getattr(module, "__version__", "unknown"))
+
+    torch = importlib.import_module("torch")
+    if torch.cuda.is_available():
+        device_name = torch.cuda.get_device_name(0) or "NVIDIA GPU"
+        versions["torch.cuda"] = f"available ({getattr(torch.version, 'cuda', 'unknown')}; {device_name})"
+    else:
+        versions["torch.cuda"] = "unavailable"
 
     import desktop_qt_app
 
