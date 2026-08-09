@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Windows CUDA offline installer
+- Bundle both Small and Base PyTorch checkpoints in the offline installer.
+- Verify bundled checkpoints with `torch.load` during packaging.
+- Delete and retry a corrupt PyTorch checkpoint before surfacing a load error.
+
 ### Figma UI 还原
 - 根据 Figma 设计稿重新校准主界面、菜单、模型下拉框、分辨率下拉框和全屏悬浮按钮的尺寸、位置、圆角和选中态。
 - 播放、暂停、音量、文件夹、下拉箭头、右箭头、勾选和全屏图标改为从 Figma 导出的原始 PNG 资产。

@@ -16,7 +16,7 @@ DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
 DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
 ```
 
-离线版包含 CUDA 运行时和 Small 模型。三个文件必须放在同一目录，再运行主 `.exe`。
+离线版包含 CUDA 运行时、Small 模型和 Base 模型。三个文件必须放在同一目录，再运行主 `.exe`。
 
 模型缓存位置：
 

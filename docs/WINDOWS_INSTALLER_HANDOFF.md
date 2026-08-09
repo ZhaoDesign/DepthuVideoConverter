@@ -69,7 +69,7 @@ The chosen release paths:
 2. Publish an offline CUDA package as one launcher `.exe` plus two `.bin` slices.
 3. Include app source, assets, and installer scripts.
 4. The online installer downloads Python 3.11 and locked CUDA PyTorch dependencies during setup.
-5. The offline package includes the CUDA runtime and the Small model.
+5. The offline package includes the CUDA runtime and the Small + Base models.
 
 The online installer remains a few MB. The offline package is split so each GitHub Release asset stays below the single-file upload limit; keep all three offline files in the same folder before running the `.exe`.
 
@@ -154,7 +154,7 @@ Desktop / Start Menu uninstall shortcuts: not created
 - Windows 64-bit.
 - Online installer: internet access during installation.
 - Online installer: internet access on first Base/Large model use.
-- Offline installer: no internet required during installation or Small model use.
+- Offline installer: no internet required during installation or Small + Base model use.
 - CUDA PyTorch is preferred when an NVIDIA GPU is available; ONNX Runtime remains the CPU fallback.
 
 ## Troubleshooting
@@ -194,7 +194,7 @@ Requirements:
 
 - Windows 64-bit
 - Online installer: internet access during installation
-- Offline installer: no internet required during installation or Small model use
+- Offline installer: no internet required during installation or Small + Base model use
 
 Troubleshooting:
 

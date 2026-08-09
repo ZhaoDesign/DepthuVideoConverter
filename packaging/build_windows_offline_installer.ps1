@@ -31,17 +31,24 @@ $TorchWheelSha256 = "8095729db14e7fd5178a39676fdd679208eff4041407ea34e3d898336c9
 $RequirementsFile = Join-Path $ProjectRoot "packaging\windows-web-installer\runtime-requirements-cuda.txt"
 $pipIndex = "https://pypi.tuna.tsinghua.edu.cn/simple"
 $ModelsDir = Join-Path $BuildDir "models"
-$ModelFile = Join-Path $ModelsDir "depth_anything_v2_vits.pth"
-$ModelCache = Join-Path $CacheDir "depth_anything_v2_vits.pth"
 $HfMirror = if ([string]::IsNullOrWhiteSpace($env:HF_MIRROR)) {
     "https://hf-mirror.com"
 } else {
     $env:HF_MIRROR.TrimEnd("/")
 }
-$ModelUrls = @(
-    "$HfMirror/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth",
-    "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth",
-    "https://mirror.ghproxy.com/https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth"
+$BundledModels = @(
+    @{
+        Label = "Small (fastest, ~99 MB)"
+        FileName = "depth_anything_v2_vits.pth"
+        CacheFile = "depth_anything_v2_vits.pth"
+        Repo = "depth-anything/Depth-Anything-V2-Small"
+    },
+    @{
+        Label = "Base (balanced, ~392 MB)"
+        FileName = "depth_anything_v2_vitb.pth"
+        CacheFile = "depth_anything_v2_vitb.pth"
+        Repo = "depth-anything/Depth-Anything-V2-Base"
+    }
 )
 $VerifyScript = Join-Path $ProjectRoot "packaging\windows-web-installer\verify_runtime.py"
 $IssFile = Join-Path $ProjectRoot "packaging\windows-offline-installer\ContourControlToolSetup.iss"
@@ -133,6 +140,106 @@ function Invoke-ResumableDownload {
     }
 
     throw "CUDA PyTorch wheel download failed or hash verification failed."
+}
+
+function Get-ModelUrls {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$FileName
+    )
+
+    $hfPath = "$Repo/resolve/main/$FileName"
+    return @(
+        "$HfMirror/$hfPath",
+        "https://huggingface.co/$hfPath",
+        "https://mirror.ghproxy.com/https://huggingface.co/$hfPath"
+    )
+}
+
+function Test-TorchCheckpoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $checker = Join-Path $CacheDir "verify_torch_checkpoint.py"
+    if (-not (Test-Path -LiteralPath $checker)) {
+        @'
+import sys
+import torch
+
+try:
+    torch.load(sys.argv[1], map_location="cpu", weights_only=True)
+except TypeError:
+    torch.load(sys.argv[1], map_location="cpu")
+'@ | Set-Content -LiteralPath $checker -Encoding ASCII
+    }
+
+    $stamp = [Guid]::NewGuid().ToString("N")
+    $stdout = Join-Path $CacheDir "verify_torch_checkpoint_$stamp.out"
+    $stderr = Join-Path $CacheDir "verify_torch_checkpoint_$stamp.err"
+    try {
+        $proc = Start-Process -FilePath $PythonExe -ArgumentList @($checker, $Path) -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        return ($proc.ExitCode -eq 0)
+    } finally {
+        Remove-Item -LiteralPath $stdout -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderr -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Install-BundledModel {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$CachePath
+    )
+
+    $minBytes = 1000000
+    if ((Test-Path -LiteralPath $Destination) -and ((Get-Item -LiteralPath $Destination).Length -gt $minBytes) -and (Test-TorchCheckpoint -PythonExe $PythonExe -Path $Destination)) {
+        Write-Host "[cached] $Label"
+        return
+    }
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Force
+    }
+
+    if ((Test-Path -LiteralPath $CachePath) -and ((Get-Item -LiteralPath $CachePath).Length -gt $minBytes) -and (Test-TorchCheckpoint -PythonExe $PythonExe -Path $CachePath)) {
+        Copy-Item -LiteralPath $CachePath -Destination $Destination -Force
+        Write-Host "[cached] $Label from build cache"
+        return
+    }
+    if (Test-Path -LiteralPath $CachePath) {
+        Remove-Item -LiteralPath $CachePath -Force
+    }
+
+    Write-Host "Downloading $Label..."
+    foreach ($url in (Get-ModelUrls -Repo $Repo -FileName $FileName)) {
+        Write-Host "  -> $url"
+        $tmp = "$Destination.tmp"
+        try {
+            if (Test-Path -LiteralPath $tmp) {
+                Remove-Item -LiteralPath $tmp -Force
+            }
+            curl.exe -L --retry 3 --retry-delay 5 --retry-all-errors -o $tmp $url
+            if ($LASTEXITCODE -ne 0) { throw "download failed" }
+            if (-not (Test-TorchCheckpoint -PythonExe $PythonExe -Path $tmp)) {
+                throw "checkpoint verification failed"
+            }
+            Move-Item -LiteralPath $tmp -Destination $Destination -Force
+            Copy-Item -LiteralPath $Destination -Destination $CachePath -Force
+            return
+        } catch {
+            Write-Host "  !! download failed, trying next source..."
+            if (Test-Path -LiteralPath $tmp) {
+                Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    throw "Failed to download the $Label."
 }
 
 function Remove-NonRuntimeFiles {
@@ -257,35 +364,12 @@ Write-Host "Verifying runtime after cleanup..."
 if ($LASTEXITCODE -ne 0) { throw "Runtime verification failed after cleanup" }
 Remove-NonRuntimeFiles -Root $RuntimeDir
 
-# --- Download Small PyTorch model ---
+# --- Download bundled PyTorch models ---
 New-Item -ItemType Directory -Force -Path $ModelsDir | Out-Null
-if ((Test-Path $ModelFile) -and ((Get-Item $ModelFile).Length -gt 1000000)) {
-    Write-Host "[cached] Small PyTorch model"
-} elseif ((Test-Path $ModelCache) -and ((Get-Item $ModelCache).Length -gt 1000000)) {
-    Write-Host "[cached] Small PyTorch model from build cache"
-    Copy-Item -LiteralPath $ModelCache -Destination $ModelFile -Force
-} else {
-    Write-Host "Downloading Small PyTorch model..."
-    $downloaded = $false
-    foreach ($url in $ModelUrls) {
-        Write-Host "  -> $url"
-        $tmp = "$ModelFile.tmp"
-        try {
-            if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Force }
-            curl.exe -L --retry 3 --retry-delay 5 --retry-all-errors -o $tmp $url
-            if ($LASTEXITCODE -ne 0) { throw "download failed" }
-            Move-Item -LiteralPath $tmp -Destination $ModelFile -Force
-            Copy-Item -LiteralPath $ModelFile -Destination $ModelCache -Force
-            $downloaded = $true
-            break
-        } catch {
-            Write-Host "  !! download failed, trying next source..."
-            if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-        }
-    }
-    if (-not $downloaded) {
-        throw "Failed to download the Small PyTorch model."
-    }
+foreach ($model in $BundledModels) {
+    $modelFile = Join-Path $ModelsDir $model.FileName
+    $modelCache = Join-Path $CacheDir $model.CacheFile
+    Install-BundledModel -PythonExe $pythonExe -Label $model.Label -Repo $model.Repo -FileName $model.FileName -Destination $modelFile -CachePath $modelCache
 }
 
 # --- Get runtime size ---

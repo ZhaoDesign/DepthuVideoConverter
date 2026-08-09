@@ -89,6 +89,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "..\..\build\runtime-cuda\*"; DestDir: "{localappdata}\CCT\rt311cuda"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: ShouldInstallRuntime
 ; Bundled Small PyTorch model — no download needed on first run
 Source: "..\..\build\models\depth_anything_v2_vits.pth"; DestDir: "{localappdata}\DepthuVideoConverter\models"; Flags: ignoreversion
+Source: "..\..\build\models\depth_anything_v2_vitb.pth"; DestDir: "{localappdata}\DepthuVideoConverter\models"; Flags: ignoreversion
 ; Application source
 Source: "..\..\desktop_launcher.py"; DestDir: "{app}\app"; Flags: ignoreversion; BeforeInstall: StopExistingApp
 Source: "..\..\desktop_qt_app.py"; DestDir: "{app}\app"; Flags: ignoreversion

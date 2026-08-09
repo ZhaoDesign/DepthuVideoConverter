@@ -164,6 +164,13 @@ def _depth_model_class():
     return DepthAnythingV2
 
 
+def _load_torch_state_dict(torch_module: Any, checkpoint_path: Path) -> Dict[str, Any]:
+    try:
+        return torch_module.load(str(checkpoint_path), map_location="cpu", weights_only=True)
+    except TypeError:
+        return torch_module.load(str(checkpoint_path), map_location="cpu")
+
+
 def detect_device() -> Tuple[str, str]:
     """Return (provider_key, human_readable_description)."""
     if _selected_backend() == "torch":
@@ -318,9 +325,18 @@ def load_model(model_size_label: str, device_str: str, progress=None) -> Any:
         )
 
         try:
-            state_dict = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
-        except TypeError:
-            state_dict = torch.load(str(checkpoint_path), map_location="cpu")
+            state_dict = _load_torch_state_dict(torch, checkpoint_path)
+        except Exception:
+            checkpoint_path.unlink(missing_ok=True)
+            if progress is not None:
+                progress(0.0, f"妯″瀷鏂囦欢鎹熷潖锛屾鍦ㄩ噸鏂颁笅杞斤細{model_size_label}")
+            checkpoint_path = ensure_checkpoint(model_size_label, progress)
+            try:
+                state_dict = _load_torch_state_dict(torch, checkpoint_path)
+            except Exception as retry_exc:
+                raise RuntimeError(
+                    f"{model_size_label} 妯″瀷鏂囦欢鎹熷潖鎴栦笉瀹屾暣锛岃閲嶆柊瀹夎鎴栨墜鍔ㄥ垹闄ゆā鍨嬪悗閲嶈瘯銆?"
+                ) from retry_exc
         model.load_state_dict(state_dict)
         model = model.to(torch.device(device_str)).eval()
 
