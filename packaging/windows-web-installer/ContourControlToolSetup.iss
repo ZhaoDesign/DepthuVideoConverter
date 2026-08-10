@@ -17,6 +17,7 @@ AppSupportURL=https://github.com/ZhaoDesign/DepthuVideoConverter/issues
 DefaultDirName={localappdata}\Programs\DepthuVideoConverter
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+DisableDirPage=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
