@@ -65,6 +65,19 @@ UV_PYTHON_INSTALL_DIR="$CACHE_DIR/python" \
 UV_CACHE_DIR="$CACHE_DIR/uv" \
 "$UV_BIN" venv --python "$PYTHON_VERSION" "$RUNTIME_DIR"
 
+# `uv venv` 会把 `bin/python` 指向外部缓存里的解释器。
+# macOS 的严格签名不接受 bundle 内部出现这种外链，所以这里把解释器复制进 runtime。
+if [[ -L "$RUNTIME_DIR/bin/python" ]]; then
+    PYTHON_TARGET="$(readlink "$RUNTIME_DIR/bin/python")"
+    if [[ -x "$PYTHON_TARGET" ]]; then
+        unlink "$RUNTIME_DIR/bin/python"
+        cp "$PYTHON_TARGET" "$RUNTIME_DIR/bin/python"
+        chmod 755 "$RUNTIME_DIR/bin/python"
+    fi
+fi
+ln -sf python "$RUNTIME_DIR/bin/python3"
+ln -sf python "$RUNTIME_DIR/bin/python3.11"
+
 log "正在安装依赖（可能需要几分钟）..."
 UV_CACHE_DIR="$CACHE_DIR/uv" \
 "$UV_BIN" pip install \

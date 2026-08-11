@@ -23,8 +23,9 @@ from depth_converter import (
     MODELS_DIR,
     detect_device,
     ffmpeg_available,
+    media_kind_for_path,
     normalize_resolution_choice,
-    process_video,
+    process_media,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Thread pool for running blocking process_video() calls
+# Thread pool for running blocking media processing calls
 _executor = ThreadPoolExecutor(max_workers=1)
 
 # In-memory progress store (one task at a time — single user desktop app)
@@ -108,16 +109,16 @@ async def get_progress(task_id: str) -> Dict[str, Any]:
 
 @app.post("/api/process")
 async def process(
-    input_video: UploadFile = File(...),
+    input_media: UploadFile = File(...),
     model_size_label: str = Form("Small (fastest, ~95 MB)"),
     resolution_choice: str = Form("Original"),
     invert_bw: bool = Form(False),
     smoothing_strength: float = Form(60),
     preserve_audio: bool = Form(True),
 ) -> FileResponse:
-    """Upload a video and convert it to a depth-map MP4.
+    """Upload a video or image and convert it to a depth result.
 
-    Returns the output .mp4 file as a streaming download.
+    Returns MP4 for video input and PNG for image input.
     """
     # Validate model_size_label
     if model_size_label not in MODEL_DEFS:
@@ -129,10 +130,10 @@ async def process(
         raise HTTPException(status_code=400, detail=f"Unknown resolution: {resolution_choice}")
 
     # Save uploaded video to a temp file
-    suffix = Path(input_video.filename or "video.mp4").suffix or ".mp4"
+    suffix = Path(input_media.filename or "input.mp4").suffix or ".mp4"
     tmp_input = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
-        shutil.copyfileobj(input_video.file, tmp_input)
+        shutil.copyfileobj(input_media.file, tmp_input)
         tmp_input.close()
     except Exception:
         tmp_input.close()
@@ -148,7 +149,7 @@ async def process(
         loop = __import__("asyncio", fromlist=["asyncio"]).get_running_loop()
         output_path = await loop.run_in_executor(
             _executor,
-            process_video,
+            process_media,
             tmp_input.name,
             model_size_label,
             resolution_choice,
@@ -158,10 +159,13 @@ async def process(
             progress_callback,
         )
 
+        output_kind = media_kind_for_path(output_path)
+        media_type = "image/png" if output_kind == "image" else "video/mp4"
+
         return FileResponse(
             path=output_path,
-            media_type="video/mp4",
-            filename="depth_output.mp4",
+            media_type=media_type,
+            filename=Path(output_path).name,
         )
 
     except RuntimeError as e:

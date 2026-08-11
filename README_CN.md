@@ -1,17 +1,18 @@
 # DepthuVideoConverter｜视频深度控制图工具
 
-一个本地运行的视频深度控制图生成工具。它使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) 把普通 MP4 / MOV 视频转换成灰度深度视频，可用于 AI 视频生成、ComfyUI 工作流、Seedance / 即梦等视频工具的运动参考、空间结构参考或轮廓控制素材。
+一个本地运行的视频和图片深度图生成工具。它使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) 把普通 MP4 / MOV 视频转换成灰度深度视频，也可以把单张 PNG / JPG / WEBP 图片转换成灰度深度图，可用于 AI 视频生成、ComfyUI 工作流、Seedance / 即梦等工具的运动参考、空间结构参考或轮廓控制素材。
 
-近处通常更亮，远处更暗；也可以一键黑白反转。所有处理都在本机完成，视频不会上传到外部服务器。
+近处通常更亮，远处更暗；也可以一键黑白反转。所有处理都在本机完成，视频和图片不会上传到外部服务器。
 
 ## 主要功能
 
-- 支持 MP4 / MOV 上传，生成 H.264 MP4 深度视频。
+- 支持 MP4 / MOV 等视频上传，生成 H.264 MP4 深度视频。
+- 支持单张 PNG / JPG / JPEG / WEBP / BMP / TIFF 图片，生成无损 PNG 深度图。
 - 支持 Small / Base / Large 三档 Depth Anything V2 模型。
 - 自动识别 NVIDIA CUDA、Apple Silicon MPS 或 CPU。
 - macOS 客户端默认使用 PyTorch + Apple MPS 推理；Windows 端保留 ONNX Runtime 路径。
 - 支持原始分辨率、480p、720p、1080p 输出。
-- 480p / 720p / 1080p 只表示目标高度，宽度会按原视频比例自动计算，不会压扁画面。
+- 480p / 720p / 1080p 只表示目标高度，宽度会按原视频或图片比例自动计算，不会压扁画面。
 - 支持时序平滑，减少深度视频闪烁。
 - 支持保留原视频音频。
 - Windows x64 安装器提供原生桌面应用窗口，不需要从浏览器打开。
@@ -43,11 +44,11 @@ macOS 联网安装器首次启动会自动下载运行环境，更适合想要�
 ## 桌面版使用
 
 1. 打开应用。
-2. 拖入视频，或点击选择视频。
+2. 拖入视频或图片，或点击选择文件。
 3. 选择模型、输出分辨率和平滑参数。
 4. 选择输出文件夹。
 5. 点击开始转换。
-6. 完成后点击打开视频或打开文件夹。
+6. 完成后点击打开视频/图片或打开文件夹。
 
 Windows 安装器会创建桌面和开始菜单启动快捷方式；卸载请使用 Windows“设置 > 应用”或控制面板。
 
@@ -72,6 +73,8 @@ python depth_video_converter.py
 
 ```bash
 python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~392 MB)"
+# 或处理单张图片，默认输出为 PNG 深度图
+python depth_video_cli.py your-image.jpg -r 720p
 ```
 
 常用参数：

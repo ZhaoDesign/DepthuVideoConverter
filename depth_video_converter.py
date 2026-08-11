@@ -29,7 +29,8 @@ from depth_converter import (
     MODELS_DIR,
     detect_device,
     ffmpeg_available,
-    process_video,
+    media_kind_for_path,
+    process_media,
 )
 
 APP_TITLE = "DepthuVideoConverter"
@@ -66,25 +67,34 @@ def _torch_version() -> str:
     except Exception:
         return "未安装"
 
-def _process_video_for_gradio(
-    input_video_path: str,
+def _process_media_for_gradio(
+    input_media_path: str,
     model_size_label: str,
     resolution_choice: str,
     invert_bw: bool,
     smoothing_strength: float,
     preserve_audio: bool,
     progress: gr.Progress = gr.Progress(),
-) -> str:
+) -> tuple[dict, dict]:
     """Call the shared processor and expose errors through the Gradio UI."""
     try:
-        return process_video(
-            input_video_path=input_video_path,
+        output_path = process_media(
+            input_path=input_media_path,
             model_size_label=model_size_label,
             resolution_choice=resolution_choice,
             invert_bw=invert_bw,
             smoothing_strength=smoothing_strength,
             preserve_audio=preserve_audio,
             progress=progress,
+        )
+        if media_kind_for_path(output_path) == "image":
+            return (
+                gr.update(value=None, visible=False),
+                gr.update(value=output_path, visible=True),
+            )
+        return (
+            gr.update(value=output_path, visible=True),
+            gr.update(value=None, visible=False),
         )
     except RuntimeError as e:
         raise gr.Error(str(e))
@@ -151,10 +161,9 @@ def create_ui() -> gr.Blocks:
 
         with gr.Row():
             with gr.Column(scale=1):
-                input_video = gr.Video(
-                    label="上传视频",
-                    sources=["upload"],
-                    format="mp4",
+                input_media = gr.File(
+                    label="上传视频或图片",
+                    type="filepath",
                 )
 
                 model_size = gr.Dropdown(
@@ -205,11 +214,16 @@ def create_ui() -> gr.Blocks:
                     format="mp4",
                     autoplay=True,
                 )
+                output_image = gr.Image(
+                    label="输出深度图",
+                    type="filepath",
+                    visible=False,
+                )
 
         process_btn.click(
-            fn=_process_video_for_gradio,
-            inputs=[input_video, model_size, resolution, invert, smoothing, preserve_audio],
-            outputs=output_video,
+            fn=_process_media_for_gradio,
+            inputs=[input_media, model_size, resolution, invert, smoothing, preserve_audio],
+            outputs=[output_video, output_image],
         )
 
         if _is_desktop_mode():

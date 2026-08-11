@@ -20,7 +20,6 @@ LEGACY_APP_DIR_NAMES = ("DepthVideoConverter",)
 GITHUB_URL = "https://github.com/ZhaoDesign/DepthuVideoConverter"
 APP_ICON_ICO = "contour-control-tool.ico"
 APP_ICON_PNG = "contour-control-tool.png"
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 
 WINDOW_WIDTH = 1110
 WINDOW_HEIGHT = 852
@@ -115,7 +114,7 @@ def _show_native_error(title: str, message: str) -> None:
     print(f"{title}: {message}", file=sys.stderr)
 
 try:
-    from PySide6.QtCore import QPoint, QRectF, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
+    from PySide6.QtCore import QEvent, QPoint, QRectF, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
     from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap  # noqa: E402
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
     from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
@@ -149,12 +148,15 @@ try:
     )
 
     from depth_converter import (  # noqa: E402
+        IMAGE_EXTENSIONS,
         MODEL_DEFS,
         MODELS_DIR,
         RESOLUTION_PRESETS,
+        VIDEO_EXTENSIONS,
         detect_device,
         ffmpeg_available,
-        process_video,
+        media_kind_for_path,
+        process_media,
     )
 except ImportError:
     msg = traceback.format_exc()
@@ -210,17 +212,28 @@ def _unique_output_path(input_path: str, output_dir: str) -> Path:
     source = Path(input_path)
     target_dir = Path(output_dir).expanduser().resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
-    base = target_dir / f"{source.stem}_depth.mp4"
+    extension = ".png" if media_kind_for_path(input_path) == "image" else ".mp4"
+    base = target_dir / f"{source.stem}_depth{extension}"
     if not base.exists():
         return base
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    return target_dir / f"{source.stem}_depth_{stamp}.mp4"
+    return target_dir / f"{source.stem}_depth_{stamp}{extension}"
 
 
 def _short_path(path: str, max_chars: int = 62) -> str:
     if len(path) <= max_chars:
         return path
     return "..." + path[-(max_chars - 3):]
+
+
+def _first_media_path_from_urls(urls) -> str | None:
+    for url in urls:
+        if not url.isLocalFile():
+            continue
+        path = Path(url.toLocalFile())
+        if path.suffix.lower() in VIDEO_EXTENSIONS | IMAGE_EXTENSIONS and path.is_file():
+            return str(path)
+    return None
 
 
 class StyledDialog(QDialog):
@@ -285,6 +298,33 @@ class IconButton(QPushButton):
 
     def set_icon_name(self, icon_name: str) -> None:
         _set_icon(self, icon_name, 16)
+
+
+class ClearIconButton(QPushButton):
+    """Small icon-only close button used to clear the selected input video."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("clearButton")
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("清空视频")
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if self.underMouse() and self.isEnabled():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#F3F4F6"))
+            painter.drawRoundedRect(self.rect(), 8, 8)
+
+        color = QColor("#6C7583" if self.isEnabled() else "#C8CED7")
+        pen = QPen(color)
+        pen.setWidthF(1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(10, 10, 18, 18)
+        painter.drawLine(18, 10, 10, 18)
 
 
 class FigmaComboBox(QComboBox):
@@ -702,7 +742,7 @@ class TopBar(QFrame):
 
     def _file_menu(self) -> FigmaPopupMenu:
         menu = self._menu()
-        menu.add_action_item("打开视频", self._window._choose_input, active=True)
+        menu.add_action_item("打开文件", self._window._choose_input, active=True)
         menu.add_separator()
         menu.add_action_item("退出", self._window.close)
         return menu
@@ -842,15 +882,20 @@ class FullscreenVideoDialog(QDialog):
 
 
 class VideoPlayer(QFrame):
-    """Native media player with audio, mute, volume, and seek controls."""
+    """Native preview for a video or a static image."""
 
-    def __init__(self, parent=None):
+    file_dropped = Signal(str)
+
+    def __init__(self, parent=None, accept_drops: bool = False):
         super().__init__(parent)
         self.setObjectName("videoPlayer")
+        self._accept_drops = accept_drops
+        self.setAcceptDrops(accept_drops)
         self.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
         self._duration = 0
         self._slider_dragging = False
         self._source_path: str | None = None
+        self._media_kind: str | None = None
 
         self._player = QMediaPlayer(self)
         self._audio = QAudioOutput(self)
@@ -933,8 +978,27 @@ class VideoPlayer(QFrame):
         self._volume_slider.setFixedWidth(88)
         self._volume_slider.valueChanged.connect(self._on_volume_changed)
         controls.addWidget(self._volume_slider)
+        self._video_controls_widget = controls_widget
 
-        layout.addWidget(controls_widget)
+        self._image_notice_widget = QFrame(self)
+        self._image_notice_widget.setObjectName("transportControls")
+        self._image_notice_widget.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+        image_notice_layout = QHBoxLayout(self._image_notice_widget)
+        image_notice_layout.setContentsMargins(0, 0, 0, 0)
+        self._image_notice_label = QLabel("静态图片预览")
+        self._image_notice_label.setObjectName("muted")
+        self._image_notice_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_notice_layout.addWidget(self._image_notice_label, 1)
+
+        self._controls_container = QWidget(self)
+        self._controls_container.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+        self._controls_stack = QStackedLayout(self._controls_container)
+        self._controls_stack.setContentsMargins(0, 0, 0, 0)
+        self._controls_stack.addWidget(self._video_controls_widget)
+        self._controls_stack.addWidget(self._image_notice_widget)
+        self._controls_stack.setCurrentWidget(self._video_controls_widget)
+
+        layout.addWidget(self._controls_container)
 
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
@@ -953,23 +1017,45 @@ class VideoPlayer(QFrame):
         widget.setMask(mask)
 
     def load(self, path: str) -> None:
+        kind = media_kind_for_path(path)
+        if kind == "image":
+            self._load_image(path)
+            return
+        self._load_video(path)
+
+    def _load_video(self, path: str) -> None:
         self.stop()
         self._source_path = path
         self._duration = 0
+        self._media_kind = "video"
         self._player.setSource(QUrl.fromLocalFile(path))
         self._show_preview(path)
         self._fullscreen_btn.show()
         self._fullscreen_btn.raise_()
+        self._controls_stack.setCurrentWidget(self._video_controls_widget)
         self._slider.setRange(0, 0)
         self._slider.setValue(0)
         self._time_label.setText("0:00 / 0:00")
+
+    def _load_image(self, path: str) -> None:
+        self.stop()
+        self._source_path = path
+        self._duration = 0
+        self._media_kind = "image"
+        self._player.setSource(QUrl())
+        self._show_preview(path)
+        self._fullscreen_btn.hide()
+        self._controls_stack.setCurrentWidget(self._image_notice_widget)
+        self._slider.setRange(0, 0)
+        self._slider.setValue(0)
+        self._time_label.setText("静态图片")
 
     def stop(self) -> None:
         self._player.stop()
         self._play_btn.set_icon_name("icon-play.png")
 
     def _toggle_play(self) -> None:
-        if self._player.source().isEmpty():
+        if self._media_kind != "video" or self._player.source().isEmpty():
             return
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
@@ -978,10 +1064,14 @@ class VideoPlayer(QFrame):
             self._player.play()
 
     def _toggle_mute(self) -> None:
+        if self._media_kind != "video":
+            return
         self._audio.setMuted(not self._audio.isMuted())
         self._update_volume_icon()
 
     def _on_volume_changed(self, value: int) -> None:
+        if self._media_kind != "video":
+            return
         self._audio.setVolume(value / 100)
         if value > 0 and self._audio.isMuted():
             self._audio.setMuted(False)
@@ -990,23 +1080,33 @@ class VideoPlayer(QFrame):
         self._update_volume_icon()
 
     def _on_slider_press(self) -> None:
+        if self._media_kind != "video":
+            return
         self._slider_dragging = True
 
     def _on_slider_release(self) -> None:
+        if self._media_kind != "video":
+            return
         self._slider_dragging = False
         self._player.setPosition(self._slider.value())
 
     def _on_position_changed(self, position: int) -> None:
+        if self._media_kind != "video":
+            return
         if not self._slider_dragging:
             self._slider.setValue(position)
         self._update_time(position, self._duration)
 
     def _on_duration_changed(self, duration: int) -> None:
+        if self._media_kind != "video":
+            return
         self._duration = max(0, duration)
         self._slider.setRange(0, self._duration)
         self._update_time(self._player.position(), self._duration)
 
     def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+        if self._media_kind != "video":
+            return
         icon = "icon-pause.png" if state == QMediaPlayer.PlaybackState.PlayingState else "icon-play.png"
         self._play_btn.set_icon_name(icon)
 
@@ -1018,7 +1118,7 @@ class VideoPlayer(QFrame):
             self._time_label.setText("无法播放")
 
     def _show_preview(self, path: str) -> None:
-        pixmap = self._first_frame_pixmap(path)
+        pixmap = self._media_pixmap(path)
         if pixmap is None:
             self._placeholder.setText(Path(path).name)
             self._video_stack.setCurrentWidget(self._placeholder)
@@ -1034,8 +1134,14 @@ class VideoPlayer(QFrame):
         self._preview.setText("")
         self._video_stack.setCurrentWidget(self._preview)
 
-    def _first_frame_pixmap(self, path: str) -> QPixmap | None:
+    def _media_pixmap(self, path: str) -> QPixmap | None:
         try:
+            if media_kind_for_path(path) == "image":
+                image = QImage(path)
+                if image.isNull():
+                    return None
+                return QPixmap.fromImage(image)
+
             import cv2
 
             cap = cv2.VideoCapture(path)
@@ -1078,49 +1184,25 @@ class VideoPlayer(QFrame):
         self.stop()
         self._player.setSource(QUrl())
         self._source_path = None
+        self._media_kind = None
         self._preview.clear()
-        self._placeholder.setText("尚未加载视频")
+        self._placeholder.setText("尚未加载文件")
         self._video_stack.setCurrentWidget(self._placeholder)
+        self._controls_stack.setCurrentWidget(self._video_controls_widget)
         self._fullscreen_btn.hide()
+        self._time_label.setText("0:00 / 0:00")
 
+    def has_source(self) -> bool:
+        return bool(self._source_path)
 
-class DropPanel(QFrame):
-    file_dropped = Signal(str)
-    browse_requested = Signal()
+    def source_path(self) -> str | None:
+        return self._source_path
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("dropPanel")
-        self.setAcceptDrops(True)
-        self.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(12)
-
-        title = QLabel("拖入视频文件")
-        title.setObjectName("dropTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle = QLabel("支持 MP4 / MOV / M4V / AVI / MKV / WEBM")
-        subtitle.setObjectName("muted")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.choose_button = QPushButton("选择视频")
-        self.choose_button.setObjectName("secondaryButton")
-        self.choose_button.setFixedHeight(32)
-        self.choose_button.clicked.connect(self.browse_requested.emit)
-
-        layout.addStretch(1)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addWidget(self.choose_button)
-        layout.addStretch(1)
-
-    def set_file(self, path: str | None) -> None:
-        self.choose_button.setText(Path(path).name if path else "选择视频")
+    def clear_source(self) -> None:
+        self.cleanup()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        if self._first_video_path(event.mimeData().urls()):
+        if self._accept_drops and _first_media_path_from_urls(event.mimeData().urls()):
             event.acceptProposedAction()
             self.setProperty("dragging", True)
             self.style().unpolish(self)
@@ -1138,7 +1220,72 @@ class DropPanel(QFrame):
         self.setProperty("dragging", False)
         self.style().unpolish(self)
         self.style().polish(self)
-        path = self._first_video_path(event.mimeData().urls())
+        path = _first_media_path_from_urls(event.mimeData().urls()) if self._accept_drops else None
+        if path:
+            self.file_dropped.emit(path)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+
+class DropPanel(QFrame):
+    file_dropped = Signal(str)
+    browse_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("dropPanel")
+        self.setAcceptDrops(True)
+        self.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
+
+        title = QLabel("拖入视频或图片文件")
+        title.setObjectName("dropTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle = QLabel("支持 MP4 / MOV / M4V / AVI / MKV / WEBM / PNG / JPG / JPEG / WEBP")
+        subtitle.setObjectName("muted")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.choose_button = QPushButton("选择文件")
+        self.choose_button.setObjectName("secondaryButton")
+        self.choose_button.setFixedHeight(32)
+        self.choose_button.clicked.connect(self.browse_requested.emit)
+
+        layout.addStretch(1)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(self.choose_button)
+        layout.addStretch(1)
+
+    def set_file(self, path: str | None) -> None:
+        if path:
+            self.choose_button.setText(Path(path).name)
+        else:
+            self.choose_button.setText("选择文件")
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._first_media_path(event.mimeData().urls()):
+            event.acceptProposedAction()
+            self.setProperty("dragging", True)
+            self.style().unpolish(self)
+            self.style().polish(self)
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event) -> None:  # type: ignore[override]
+        self.setProperty("dragging", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        self.setProperty("dragging", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        path = self._first_media_path(event.mimeData().urls())
         if path:
             self.file_dropped.emit(path)
             event.acceptProposedAction()
@@ -1146,12 +1293,12 @@ class DropPanel(QFrame):
             event.ignore()
 
     @staticmethod
-    def _first_video_path(urls) -> str | None:
+    def _first_media_path(urls) -> str | None:
         for url in urls:
             if not url.isLocalFile():
                 continue
             path = Path(url.toLocalFile())
-            if path.suffix.lower() in VIDEO_EXTENSIONS and path.is_file():
+            if path.suffix.lower() in VIDEO_EXTENSIONS | IMAGE_EXTENSIONS and path.is_file():
                 return str(path)
         return None
 
@@ -1187,8 +1334,8 @@ class ConversionWorker(QObject):
                 self.progress.emit(percent, description)
 
             report(0.0, "准备开始转换")
-            temp_result = process_video(
-                input_video_path=self.input_path,
+            temp_result = process_media(
+                input_path=self.input_path,
                 model_size_label=self.model_label,
                 resolution_choice=self.resolution,
                 invert_bw=self.invert,
@@ -1212,9 +1359,13 @@ class ContourControlWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.input_path: str | None = None
+        self.input_kind: str | None = None
         self.output_path: str | None = None
         self.worker_thread: QThread | None = None
         self.worker: ConversionWorker | None = None
+        self.output_dir_custom = False
+        self._progress_video_started = False
+        self._last_logged_percent = -1
 
         self.setWindowTitle(APP_TITLE)
         if sys.platform != "darwin":
@@ -1227,6 +1378,48 @@ class ContourControlWindow(QMainWindow):
 
         self._build_ui()
         self._refresh_status()
+
+    def _conversion_running(self) -> bool:
+        return self.worker_thread is not None and self.worker_thread.isRunning()
+
+    def _reset_output_state(self) -> None:
+        self.output_path = None
+        if hasattr(self, "_video_player"):
+            self._video_player.clear_source()
+        if hasattr(self, "open_output_btn"):
+            self.open_output_btn.setEnabled(False)
+        if hasattr(self, "open_folder_btn"):
+            self.open_folder_btn.setEnabled(False)
+        if hasattr(self, "result_label"):
+            self.result_label.setText("尚未生成输出结果")
+            self.result_label.setToolTip("")
+        if hasattr(self, "open_output_btn"):
+            self.open_output_btn.setText("打开结果")
+        if hasattr(self, "output_title"):
+            self.output_title.setText(self._output_title_text())
+
+    def _output_title_text(self) -> str:
+        if self.input_kind == "image":
+            return "深度图"
+        if self.input_kind == "video":
+            return "深度视频"
+        return "深度结果"
+
+    def _clear_input_video(self) -> None:
+        if self._conversion_running():
+            _show_dialog(self, APP_TITLE, "转换正在进行，不能清空输入文件。")
+            return
+        self.input_path = None
+        self.input_kind = None
+        self.drop_panel.set_file(None)
+        self.input_media_stack.setCurrentWidget(self.input_media_empty)
+        self._src_player.clear_source()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("选择一个视频或图片后开始转换。")
+        self.state_label.setText("等待文件")
+        self._reset_output_state()
+        self.clear_input_btn.setVisible(False)
+        self._sync_media_controls()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -1267,7 +1460,7 @@ class ContourControlWindow(QMainWindow):
             """)
 
         file_menu = mb.addMenu("文件")
-        open_act = QAction("打开视频", self)
+        open_act = QAction("打开文件", self)
         open_act.triggered.connect(self._choose_input)
         file_menu.addAction(open_act)
         file_menu.addSeparator()
@@ -1331,6 +1524,7 @@ class ContourControlWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(self, "选择默认输出目录", str(Path.home() / "Desktop"))
         if d:
             self.output_dir = d
+            self.output_dir_custom = True
             self.output_dir_label.setText(f"输出到： {_short_path(d, 28)}")
             self.output_dir_label.setToolTip(d)
 
@@ -1374,6 +1568,24 @@ class ContourControlWindow(QMainWindow):
         header.addWidget(self.ffmpeg_badge)
         return header
 
+    def _build_input_title_row(self) -> QWidget:
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+
+        title = QLabel("输入文件")
+        title.setObjectName("sectionTitle")
+        title.setFixedHeight(20)
+        row_layout.addWidget(title)
+        row_layout.addStretch(1)
+
+        self.clear_input_btn = ClearIconButton(self)
+        self.clear_input_btn.clicked.connect(self._clear_input_video)
+        self.clear_input_btn.setVisible(False)
+        row_layout.addWidget(self.clear_input_btn)
+        return row
+
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
@@ -1382,10 +1594,7 @@ class ContourControlWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        section = QLabel("输入视频")
-        section.setObjectName("sectionTitle")
-        section.setFixedHeight(20)
-        layout.addWidget(section)
+        layout.addWidget(self._build_input_title_row())
 
         media_area = QWidget()
         media_area.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
@@ -1393,6 +1602,7 @@ class ContourControlWindow(QMainWindow):
         self.input_media_stack.setContentsMargins(0, 0, 0, 0)
 
         empty_media = QWidget()
+        self.input_media_empty = empty_media
         empty_media.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
         empty_layout = QVBoxLayout(empty_media)
         empty_layout.setContentsMargins(0, 0, 0, 0)
@@ -1404,7 +1614,8 @@ class ContourControlWindow(QMainWindow):
         empty_layout.addWidget(StaticTransportControls(self))
         self.input_media_stack.addWidget(empty_media)
 
-        self._src_player = VideoPlayer()
+        self._src_player = VideoPlayer(accept_drops=True)
+        self._src_player.file_dropped.connect(self._set_input_path)
         self.input_media_stack.addWidget(self._src_player)
         self.input_media_stack.setCurrentWidget(empty_media)
         layout.addWidget(media_area)
@@ -1484,7 +1695,7 @@ class ContourControlWindow(QMainWindow):
         output_row_widget.setFixedSize(INNER_WIDTH, 36)
         output_row = QHBoxLayout(output_row_widget)
         output_row.setContentsMargins(0, 0, 0, 0)
-        self.output_dir_label = QLabel("输出到： 跟随输入视频")
+        self.output_dir_label = QLabel("输出到： 跟随输入文件")
         self.output_dir_label.setObjectName("muted")
         self.output_dir_label.setFixedHeight(36)
         self.output_btn = QPushButton("输出位置")
@@ -1511,7 +1722,8 @@ class ContourControlWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        title = QLabel("深度视频")
+        self.output_title = QLabel("深度结果")
+        title = self.output_title
         title.setObjectName("sectionTitle")
         title.setFixedHeight(20)
         layout.addWidget(title)
@@ -1523,7 +1735,7 @@ class ContourControlWindow(QMainWindow):
         status_title.setObjectName("sectionTitle")
         status_title.setFixedHeight(20)
         layout.addWidget(status_title)
-        self.state_label = QLabel("等待视频")
+        self.state_label = QLabel("等待文件")
         self.state_label.setVisible(False)
 
         self.progress_bar = QProgressBar()
@@ -1533,7 +1745,7 @@ class ContourControlWindow(QMainWindow):
         self.progress_bar.setFixedSize(INNER_WIDTH, 14)
         layout.addWidget(self.progress_bar)
 
-        self.progress_label = QLabel("选择一个视频后开始转换。")
+        self.progress_label = QLabel("选择一个视频或图片后开始转换。")
         self.progress_label.setObjectName("muted")
         self.progress_label.setFixedHeight(20)
         layout.addWidget(self.progress_label)
@@ -1552,10 +1764,10 @@ class ContourControlWindow(QMainWindow):
         result_layout.setContentsMargins(12, 10, 12, 10)
         result_layout.setSpacing(12)
 
-        self.result_label = QLabel("尚未生成输出视频")
+        self.result_label = QLabel("尚未生成输出结果")
         self.result_label.setObjectName("resultText")
         self.result_label.setWordWrap(True)
-        self.open_output_btn = QPushButton("打开视频")
+        self.open_output_btn = QPushButton("打开结果")
         self.open_folder_btn = QPushButton("打开文件夹")
         for button in (self.open_output_btn, self.open_folder_btn):
             button.setObjectName("secondaryButton")
@@ -1587,47 +1799,70 @@ class ContourControlWindow(QMainWindow):
     def _choose_input(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择视频",
+            "选择视频或图片",
             str(Path.home()),
-            "Video files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm);;All files (*.*)",
+            "Media files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm *.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff);;"
+            "Video files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm);;"
+            "Image files (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff);;"
+            "All files (*.*)",
         )
         if path:
             self._set_input_path(path)
 
     def _set_input_path(self, path: str) -> None:
+        if self._conversion_running():
+            _show_dialog(self, APP_TITLE, "转换正在进行，请先完成或停止后再更换文件。")
+            return
+        kind = media_kind_for_path(path)
+        if kind is None:
+            _show_dialog(self, APP_TITLE, "不支持的文件格式，请选择视频或图片。")
+            return
+        if self.input_path and self.input_path != path:
+            self._src_player.clear_source()
         self.input_path = path
+        self.input_kind = kind
         self.drop_panel.set_file(path)
         self.input_media_stack.setCurrentWidget(self._src_player)
         self._src_player.load(path)
-        if not hasattr(self, "output_dir"):
+        if not getattr(self, "output_dir_custom", False):
             self.output_dir = str(_default_output_dir(path))
             self.output_dir_label.setText(f"输出到： {_short_path(self.output_dir, 28)}")
         self.output_dir_label.setToolTip(self.output_dir)
-        self.progress_label.setText("选择一个视频后开始转换。")
-        self.state_label.setText("已选择视频")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("选择一个视频或图片后开始转换。")
+        self.state_label.setText("已选择图片" if kind == "image" else "已选择视频")
+        self.output_title.setText("深度图" if kind == "image" else "深度视频")
+        self.drop_panel.set_file(path)
+        self.clear_input_btn.setVisible(True)
+        self._sync_media_controls()
+        self._reset_output_state()
 
     def _choose_output_dir(self) -> None:
         start_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
         path = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
         if path:
             self.output_dir = path
+            self.output_dir_custom = True
             self.output_dir_label.setText(f"输出到： {_short_path(path, 28)}")
+            self.output_dir_label.setToolTip(path)
 
     def _start_conversion(self) -> None:
         if self.worker_thread is not None and self.worker_thread.isRunning():
             return
         if not self.input_path or not Path(self.input_path).is_file():
-            _show_dialog(self, APP_TITLE, "请先选择一个视频文件。")
+            _show_dialog(self, APP_TITLE, "请先选择一个视频或图片文件。")
             return
-        if not ffmpeg_available():
+        if self.input_kind == "video" and not ffmpeg_available():
             _show_dialog(self, APP_TITLE, "FFmpeg 未就绪，无法编码输出视频。")
             return
 
         output_dir = getattr(self, "output_dir", str(_default_output_dir(self.input_path)))
         self.output_path = None
+        self._progress_video_started = False
+        self._last_logged_percent = -1
         self.open_output_btn.setEnabled(False)
         self.open_folder_btn.setEnabled(False)
-        self.result_label.setText("正在生成输出视频")
+        self.result_label.setText("正在生成深度图" if self.input_kind == "image" else "正在生成输出视频")
         self.progress_bar.setValue(0)
         self.state_label.setText("转换中")
         self._set_controls_enabled(False)
@@ -1658,14 +1893,19 @@ class ContourControlWindow(QMainWindow):
     def _on_progress(self, percent: int, description: str) -> None:
         self.progress_bar.setValue(percent)
         self.progress_label.setText(description)
-        if not description.startswith("正在下载模型"):
+        should_log = percent != self._last_logged_percent
+        if should_log:
+            self._last_logged_percent = percent
+        if not description.startswith("正在下载模型") and should_log:
             self._append_log(f"{percent:3d}%  {description}")
 
     def _on_finished(self, output_path: str) -> None:
         self.output_path = output_path
+        output_kind = media_kind_for_path(output_path)
         self.state_label.setText("已完成")
-        self.result_label.setText(_short_path(output_path, 90))
+        self.result_label.setText("深度图已生成" if output_kind == "image" else "深度视频已生成")
         self.result_label.setToolTip(output_path)
+        self.open_output_btn.setText("打开图片" if output_kind == "image" else "打开视频")
         self.open_output_btn.setEnabled(True)
         self.open_folder_btn.setEnabled(True)
         self._set_controls_enabled(True)
@@ -1676,7 +1916,7 @@ class ContourControlWindow(QMainWindow):
     def _on_failed(self, message: str) -> None:
         self.state_label.setText("失败")
         self.progress_label.setText(message)
-        self.result_label.setText("转换失败")
+        self.result_label.setText("生成失败")
         self._set_controls_enabled(True)
         self._append_log(f"失败：{message}")
         _show_dialog(self, APP_TITLE, message)
@@ -1687,13 +1927,28 @@ class ContourControlWindow(QMainWindow):
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.start_btn.setEnabled(enabled)
+        self.clear_input_btn.setEnabled(enabled)
+        self.drop_panel.setEnabled(enabled)
+        self._src_player.setEnabled(enabled)
         self.model_combo.setEnabled(enabled)
         self.model_folder_btn.setEnabled(enabled)
         self.resolution_combo.setEnabled(enabled)
-        self.smoothing_slider.setEnabled(enabled)
+        video_controls_available = self.input_kind != "image"
+        self.smoothing_slider.setEnabled(enabled and video_controls_available)
+        self.smoothing_value.setEnabled(enabled and video_controls_available)
         self.invert_check.setEnabled(enabled)
-        self.preserve_audio_check.setEnabled(enabled)
+        self.preserve_audio_check.setEnabled(enabled and video_controls_available)
         self.output_btn.setEnabled(enabled)
+
+    def _sync_media_controls(self) -> None:
+        video_controls_available = self.input_kind != "image"
+        self.smoothing_slider.setEnabled(video_controls_available)
+        self.smoothing_value.setEnabled(video_controls_available)
+        self.preserve_audio_check.setEnabled(video_controls_available)
+        if self.input_kind == "image":
+            self.preserve_audio_check.setToolTip("图片不需要音频")
+        else:
+            self.preserve_audio_check.setToolTip("")
 
     def _append_log(self, text: str) -> None:
         stamp = time.strftime("%H:%M:%S")

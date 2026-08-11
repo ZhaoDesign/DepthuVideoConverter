@@ -7,7 +7,7 @@ import argparse
 import os
 import sys
 
-from depth_converter import MODEL_DEFS, RESOLUTION_PRESETS, process_video
+from depth_converter import MODEL_DEFS, RESOLUTION_PRESETS, media_kind_for_path, process_media
 
 MODEL_LABELS = list(MODEL_DEFS.keys())
 DEFAULT_MODEL_LABEL = MODEL_LABELS[1] if len(MODEL_LABELS) > 1 else MODEL_LABELS[0]
@@ -15,13 +15,13 @@ DEFAULT_MODEL_LABEL = MODEL_LABELS[1] if len(MODEL_LABELS) > 1 else MODEL_LABELS
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert any video to a depth-map control video using Depth Anything V2.",
+        description="Convert a video or single image to a grayscale depth result using Depth Anything V2.",
     )
-    parser.add_argument("input", help="Path to input video (.mp4 / .mov)")
+    parser.add_argument("input", help="Path to input video or image")
     parser.add_argument(
         "-o", "--output",
         default=None,
-        help="Output path (default: <input>_depth.mp4)",
+        help="Output path (default: <input>_depth.mp4 for video, <input>_depth.png for image)",
     )
     parser.add_argument(
         "-m", "--model",
@@ -44,12 +44,12 @@ def main() -> None:
         "-s", "--smoothing",
         type=float,
         default=60,
-        help="Temporal smoothing 0-100 (default: 60)",
+        help="Temporal smoothing 0-100 for video input (default: 60)",
     )
     parser.add_argument(
         "--no-audio",
         action="store_true",
-        help="Don't preserve original audio",
+        help="Don't preserve original audio for video input",
     )
 
     args = parser.parse_args()
@@ -58,15 +58,21 @@ def main() -> None:
         print(f"Error: file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    output = args.output or f"{os.path.splitext(args.input)[0]}_depth.mp4"
+    kind = media_kind_for_path(args.input)
+    if kind is None:
+        print("Error: unsupported file type. Use a video or image.", file=sys.stderr)
+        sys.exit(1)
+
+    default_ext = ".png" if kind == "image" else ".mp4"
+    output = args.output or f"{os.path.splitext(args.input)[0]}_depth{default_ext}"
 
     print(f"Input:    {args.input}")
     print(f"Model:    {args.model}")
     print(f"Output:   {output}")
     print()
 
-    result = process_video(
-        input_video_path=args.input,
+    result = process_media(
+        input_path=args.input,
         model_size_label=args.model,
         resolution_choice=args.resolution,
         invert_bw=args.invert,

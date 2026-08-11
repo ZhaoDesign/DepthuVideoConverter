@@ -77,6 +77,7 @@ def write_video_ffmpeg(
     fps: float,
     output_path: str,
     crf: int = 18,
+    progress=None,
 ) -> None:
     """Encode a stack of BGR frames to H.264 MP4 via an ffmpeg pipe."""
     ffmpeg = _get_ffmpeg_path()
@@ -98,9 +99,15 @@ def write_video_ffmpeg(
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
     assert proc.stdin is not None
     try:
-        proc.stdin.write(frames.tobytes())
+        total = max(int(_n), 1)
+        for idx, frame in enumerate(frames):
+            proc.stdin.write(frame.tobytes())
+            if progress is not None:
+                progress((idx + 1) / total)
         proc.stdin.close()
-        proc.wait(timeout=300)
+        returncode = proc.wait(timeout=300)
+        if returncode != 0:
+            raise RuntimeError(f"ffmpeg 编码失败，退出码 {returncode}")
     except Exception:
         proc.kill()
         raise
