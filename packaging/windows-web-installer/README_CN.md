@@ -2,6 +2,8 @@
 
 这个目录用于构建公开 GitHub Release 的 Windows 64 位客户安装包。
 
+当前已验证并发布的版本：`v2026.08.17.1`。Release：<https://github.com/ZhaoDesign/DepthuVideoConverter/releases/tag/v2026.08.17.1>
+
 安装包本身只包含应用代码、图标和安装脚本。用户双击安装后，可以选择安装位置；安装器会在后台联网准备 Python / PyTorch / PySide6 等运行环境，不会打开浏览器，也不会弹出 PowerShell 命令窗口。
 
 ## 用户安装后的效果
@@ -36,7 +38,7 @@ Depth Anything V2 模型文件不进入安装包，首次使用对应模型时�
 先安装 Inno Setup 6，然后在项目根目录运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 输出文件：
@@ -48,7 +50,7 @@ dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 CUDA 离线版构建：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.08.1
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 离线版会输出三个文件，下载后必须放在同一个文件夹，再运行主 `.exe`：
@@ -67,10 +69,10 @@ DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
 2. 选择一个带空格的安装目录，例如 `E:\DepthuVideoConverter Native Test`。
 3. 等待运行环境下载和安装完成。
 4. 确认安装完成后不要求重启。
-5. 确认桌面和开始菜单都有启动/卸载快捷方式。
+5. 确认桌面和开始菜单都有启动快捷方式，卸载入口在 Windows“设置 > 应用”或控制面板。
 6. 双击启动，确认打开的是原生窗口，不是浏览器。
 7. 处理一个短视频，确认输出 MP4 正常生成。
-8. 使用卸载快捷方式卸载。
+8. 从 Windows“设置 > 应用”或控制面板卸载。
 
 如果安装失败，让客户提供：
 

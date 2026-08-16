@@ -13,6 +13,19 @@ Ship a customer-friendly Windows 64-bit installer for DepthuVideoConverter:
 5. No desktop or Start Menu uninstall shortcut.
 6. No restart prompt after a successful install.
 
+## Current Release: v2026.08.17.1
+
+The Windows x64 packages for the current native PySide6 direction have been built and smoke-tested:
+
+- `DepthuVideoConverter-Windows-x64-WebSetup.exe` — small online installer;
+- `DepthuVideoConverter-Windows-x64-OfflineSetup.exe`;
+- `DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin`;
+- `DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin` — offline package split files.
+
+The offline `.exe` and both `.bin` files must stay in the same directory. The release page is:
+
+`https://github.com/ZhaoDesign/DepthuVideoConverter/releases/tag/v2026.08.17.1`
+
 macOS parity is prepared at the packaging-file level, but macOS packaging has not been verified from this Windows machine.
 
 ## Main Changes
@@ -27,7 +40,7 @@ macOS parity is prepared at the packaging-file level, but macOS packaging has no
   - Progress bar, log panel, open-output buttons.
   - Runs conversion in a background Qt worker thread.
 
-- Updated `packaging/windows-web-installer/DepthuVideoConverterSetup.iss`
+- Updated `packaging/windows-web-installer/ContourControlToolSetup.iss`
   - Launch shortcuts now run `desktop_qt_app.py` with `pythonw.exe`.
   - Default install location is per-user: `%LOCALAPPDATA%\Programs\DepthuVideoConverter`.
   - The user can still choose a custom path, including paths with spaces.
@@ -78,7 +91,7 @@ The online installer remains a few MB. The offline package is split so each GitH
 Install Inno Setup 6 on Windows, then run from the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 Expected output:
@@ -90,7 +103,7 @@ dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
 Offline build:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.08.1
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 Expected offline files:
@@ -100,23 +113,37 @@ dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup.exe
 dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
 dist\windows-installer\DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
 ```
-## Verification Done On 2026-08-08
+## Verification Done On 2026-08-17
 
 Windows installer build:
 
 ```text
 DepthuVideoConverter-Windows-x64-WebSetup.exe
-Size: 2,213,342 bytes
-SHA256: E6E350EB86A59C3336107C6DE86A2B54CDAB4A0C6E024A1310386F56E83F1318
+Size: 2,334,007 bytes
+SHA256: 3A24463E6EAED0332A0C16BF7930EBF12EA626FCA4CDFCE6F4DBFDBC422EAD1F
+
+DepthuVideoConverter-Windows-x64-OfflineSetup.exe
+Size: 3,156,891 bytes
+SHA256: C0C4BDEE7436F461F7870C2174F5E304CF243410F7967686B6D67634849E0CEA
+
+DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin
+Size: 1,896,843,008 bytes
+SHA256: 2089EAA2C0F3F3D3E5683F528EDE147641ABE802D9CAD4CD4EBCB02AC320B7EC
+
+DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
+Size: 1,263,255,126 bytes
+SHA256: 48FAC8C9C9619B0D88FE1F764D92EEB56D8D507B3BECDA6BEE174AEAEFFC7E94
 ```
 
 Install test:
 
 ```text
-Install path: E:\DepthuVideoConverter Native Test
+Online smoke install path: repository `build\smoke-online-install-20260817`
+Offline smoke install path: repository `build\smoke-offline-install-20260817-c`
 Runtime path: %LOCALAPPDATA%\CCT\rt311cuda
 Runtime marker: runtime_version=2026.08.08-cuda
-Installer result: Installation process succeeded
+Online installer result: Installation process succeeded
+Offline installer result: Installation process succeeded
 Runtime install exit code: 0
 Need to restart Windows? No
 ```
@@ -144,8 +171,8 @@ Model choices loaded: 3
 Shortcut test:
 
 ```text
-Desktop launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
-Start Menu launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "E:\DepthuVideoConverter Native Test\app\desktop_qt_app.py"
+Desktop launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "{install}\app\desktop_qt_app.py"
+Start Menu launch: %LOCALAPPDATA%\CCT\rt311cuda\pythonw.exe "{install}\app\desktop_qt_app.py"
 Desktop / Start Menu uninstall shortcuts: not created
 ```
 

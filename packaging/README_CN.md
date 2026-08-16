@@ -6,6 +6,8 @@
 DepthuVideoConverter-Windows-x64-WebSetup.exe
 ```
 
+当前构建版本：`2026.08.17.1`。已完成联网版和 CUDA 离线版构建，并发布到 [GitHub Release](https://github.com/ZhaoDesign/DepthuVideoConverter/releases/tag/v2026.08.17.1)。
+
 联网版是小体积安装器：安装包只放应用代码、图标和安装脚本，首次安装时下载 Python、CUDA PyTorch、PySide6、OpenCV 和 FFmpeg 运行环境。模型文件也不进入联网包，首次选择 Base/Large 模型时下载到用户数据目录。
 
 同时提供 CUDA 离线版：
@@ -28,13 +30,19 @@ DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin
 先在 Windows 上安装 Inno Setup 6，然后运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 0.2.0
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_web_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 输出：
 
 ```text
 dist\windows-installer\DepthuVideoConverter-Windows-x64-WebSetup.exe
+```
+
+离线版构建命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_offline_installer.ps1 -AppVersion 2026.08.17.1
 ```
 
 安装后的客户体验：

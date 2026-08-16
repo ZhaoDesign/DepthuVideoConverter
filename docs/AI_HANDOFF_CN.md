@@ -89,7 +89,8 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - 当前项目已验证的 Small 模型：`models/depth_anything_v2_vits.pth`。
 - Base/Large 的定义保留，但没有为了本次迁移强行下载大模型。
 - FFmpeg 必须能在 PATH 中执行；当前环境已验证可用。
-- 当前交付形式是“项目目录 + venv”，不是已生成的 PyInstaller/Inno Setup 安装器。
+- 当前交付形式已包含 Windows x64 Inno Setup 安装器版本 `2026.08.17.1`：联网版为一个 `.exe`，离线 CUDA 版为一个 `.exe` 加两个 `.bin` 分卷；离线三件套必须放在同一目录。
+- 当前安装包发布页：`https://github.com/ZhaoDesign/DepthuVideoConverter/releases/tag/v2026.08.17.1`。
 - 参考项目的 ONNX/Web/Tauri 打包脚本不适用于当前 PyTorch/PySide6 路线，不要直接复制。
 
 ## 6. 已完成验证
@@ -101,6 +102,8 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - 离屏焦点检查：点击“选择视频”后 `hasFocus()` 为 false。
 - 真实 UI 转换：带 AAC 音轨输入，输出 `854 × 480`，H.264 + AAC，进度 100%，重复输出按时间戳命名。
 - Windows 批处理启动烟测：CRLF 修复后，`start_desktop.cmd` 可启动 `desktop_launcher.py`。
+- Windows 联网安装器和离线分卷安装器均已在隔离目录完成安装烟测；运行时验证通过，安装不要求重启。
+- 安装包 SHA256、大小和分卷文件名记录在 `docs/WINDOWS_INSTALLER_HANDOFF.md`，不要只凭文件名判断离线包是否完整。
 
 ## 7. Git 协作规则
 

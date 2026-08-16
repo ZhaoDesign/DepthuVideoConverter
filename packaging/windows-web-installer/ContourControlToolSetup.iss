@@ -104,8 +104,8 @@ Source: "..\..\assets\icon-chevron-right.png"; DestDir: "{app}\assets"; Flags: i
 Source: "..\..\assets\icon-check-dark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\icon-fullscreen.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\checkmark.png"; DestDir: "{app}\assets"; Flags: ignoreversion
-Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\depth_converter\*"; DestDir: "{app}\app\depth_converter"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__\*"
+Source: "..\..\depth_anything_v2\*"; DestDir: "{app}\app\depth_anything_v2"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__\*"
 Source: "install_runtime.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "runtime-requirements-cuda.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "verify_runtime.py"; DestDir: "{app}\installer"; Flags: ignoreversion

@@ -22,6 +22,13 @@ python verify_desktop_delivery.py
 
 ## 当前分发边界
 
-- 本项目目前验证的是“项目目录 + venv”本地交付，尚未生成 PyInstaller/Inno Setup 安装包。
+- 已生成 Windows x64 Inno Setup 安装包版本 `2026.08.17.1`，并准备发布到 GitHub Release：
+  - `DepthuVideoConverter-Windows-x64-WebSetup.exe`：小体积联网安装器，安装时联网准备运行环境；
+  - `DepthuVideoConverter-Windows-x64-OfflineSetup.exe`；
+  - `DepthuVideoConverter-Windows-x64-OfflineSetup-1.bin`；
+  - `DepthuVideoConverter-Windows-x64-OfflineSetup-2.bin`：离线版的主程序和两个分卷，必须放在同一目录。
+- 联网安装器已在隔离目录完成静默安装，运行时验证、原生桌面入口导入和 Python 编译均通过。
+- 离线安装器已在分卷所在目录完成静默安装，安装日志显示成功且无需重启；Small/Base 模型文件和桌面入口均已落地。
+- 运行时验证通过：PySide6 6.7.3、PyTorch 2.13.0+cu126、CUDA 12.6、OpenCV 4.10.0、ONNX Runtime 1.18.1、FFmpeg，以及本机 NVIDIA GPU 检测。
 - 参考项目中的 Web/ONNX/Tauri 打包脚本不适用于当前 PyTorch/PySide6 路线，因此不复制、不恢复。
-- 正式安装器需要在后续明确 Python、PyTorch、模型和 FFmpeg 的打包方式后单独设计。
+- 发布页：<https://github.com/ZhaoDesign/DepthuVideoConverter/releases/tag/v2026.08.17.1>
