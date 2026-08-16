@@ -11,6 +11,8 @@ venv/
 
 # Model checkpoint files (too large for git)
 models/*.pth
+models/*.onnx
+queue-output/
 
 # Local downloads and temporary UI regression artifacts
 downloads/
@@ -26,3 +28,7 @@ ui-check-player.png
 
 # OMC
 .omc/
+
+# Figma cache and local logs
+.figma-cache/
+*.log

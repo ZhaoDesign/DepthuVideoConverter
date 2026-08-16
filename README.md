@@ -46,7 +46,7 @@ On Windows with the project virtual environment:
 
 You can also double-click `start_desktop.cmd` in the project folder.
 
-This is the current migrated interface: a native PySide6 window that calls the local conversion core directly. It does not start an online queue, a web service, or Tauri. It supports drag-and-drop video preview, model and resolution selection, temporal smoothing, audio preservation, and local output files.
+This is the current migrated interface: a native PySide6 window that calls the local conversion core directly. It does not start an online queue, a web service, or Tauri. It supports drag-and-drop video or image preview, model and resolution selection, temporal smoothing, audio preservation for video, and local output files. Images produce PNG depth maps; videos produce H.264 MP4 depth videos.
 
 ### CLI (simplest)
 
@@ -55,8 +55,8 @@ git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~372 MB)"
-# Options: -m (model), -r (resolution), -s (smoothing), --invert, --no-audio
+python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~392 MB)"
+# Images are also supported; options: -m, -r, -s, --invert, --no-audio
 ```
 
 Models auto-download on first use.

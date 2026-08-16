@@ -50,8 +50,9 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 
 - 主窗口：无边框、约 `1110 × 852`，左输入/参数栏，右深度视频/状态栏。
 - 输入支持拖放和“选择视频”；输出目录默认跟随输入目录，也可以手动选择。
-- 模型菜单只显示 Small、Base、Large 三个受支持模型定义；模型文件优先使用项目 `models/` 目录。
-- 分辨率支持 Original、480p、720p、1080p。
+- 模型菜单只显示 Small、Base、Large 三个受支持模型定义；模型文件优先使用项目 `models/` 目录，原生桌面默认使用本地 PyTorch 后端。
+- 分辨率支持 Original、480p、720p、1080p，并按输入宽高比计算输出尺寸。
+- 输入支持 MP4/MOV 等视频和 PNG/JPG/JPEG/WEBP/BMP/TIFF 图片；图片生成 PNG 深度图，视频生成 H.264 MP4 深度视频。
 - 支持黑白反转、时序平滑和保留原声。
 - 输出重名时生成带时间戳的 `*_depth_YYYYMMDD-HHMMSS.mp4`，不覆盖旧文件。
 - 下拉弹窗优先向下展开；屏幕底部空间不足时才向上展开。模型三项菜单不显示滚动条。
@@ -62,13 +63,14 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 
 上游项目 README 定义的本地转换能力需要保留：
 
-- Small / Base / Large 模型选择与首次使用时下载；
+- Small / Base / Large 模型选择与首次使用时下载；当前 PyTorch 模型标签约为 99/392/1300 MB；
 - Original / 480p / 720p / 1080p 输出分辨率；
 - 黑白反转；
 - 0–100 时序平滑；
 - 保留或关闭原始音频；
 - CLI `depth_video_cli.py` 的输入、输出、模型、分辨率、平滑、反转和无音频参数；
 - 本地 FFmpeg 编码、模型缓存和 CPU/CUDA/MPS 设备检测。
+- 单张图片深度推理和 PNG 输出。
 
 当前这些功能通过原生界面或 CLI 保留。由于本项目已经明确选择 PySide6 本地路线，上游的 Gradio Web、Docker Web、FastAPI 在线服务、Tauri 和在线队列不作为当前桌面功能恢复；这不是遗漏，而是迁移边界。
 
@@ -77,6 +79,7 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - `depth_converter/ffmpeg.py`：FFmpeg 输出按 bytes 解码，修复音频抽取/合成时的文本解码错误。
 - `depth_converter/models.py`：支持 `DEPTH_MODELS_DIR`，并提供模型缓存清理；避免切换模型目录后仍使用旧缓存。
 - `desktop_qt_app.py`：从参考项目迁移原生窗口结构；增加稳定启动、字体回退、模型目录同步、输入/输出状态和转换线程修复。
+- `desktop_qt_app.py`：支持视频/图片导入，图片自动隐藏音频与播放控件，并按输入类型选择 MP4/PNG 输出。
 - `FigmaComboBox`：按屏幕可用区域定位弹窗，关闭不必要的水平/垂直滚动条。
 - `MouseFocusClearingButton`：保留键盘焦点能力，同时清除鼠标点击后的虚线焦点框。
 - `start_desktop.cmd`：必须使用 Windows CRLF 换行，直接运行 `venv\Scripts\pythonw.exe desktop_launcher.py`。

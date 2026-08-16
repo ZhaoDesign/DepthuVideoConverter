@@ -45,7 +45,7 @@ Windows 虚拟环境：
 
 也可以直接双击项目目录中的 `start_desktop.cmd`。
 
-这是当前迁移后的主界面：使用 PySide6 原生窗口，直接调用本地转换核心，不启动在线队列、Web 服务或 Tauri。支持拖入视频、预览、选择模型/分辨率、时序平滑、保留音频，并将结果保存到本地文件夹。
+这是当前迁移后的主界面：使用 PySide6 原生窗口，直接调用本地转换核心，不启动在线队列、Web 服务或 Tauri。支持拖入视频或图片、预览、选择模型/分辨率、时序平滑、保留音频，并将结果保存到本地文件夹。图片会生成 PNG 深度图，视频会生成 H.264 MP4 深度视频。
 
 ### CLI（最简单）
 
@@ -54,8 +54,8 @@ git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~372 MB)"
-# 选项：-m (模型), -r (分辨率), -s (平滑), --invert, --no-audio
+python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~392 MB)"
+# 也支持单张 PNG/JPG/WEBP 图片；选项：-m, -r, -s, --invert, --no-audio
 ```
 
 模型首次使用自动下载。

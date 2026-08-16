@@ -11,19 +11,32 @@ import numpy as np
 
 def ffmpeg_available() -> bool:
     """Return True if ffmpeg is on the system PATH."""
-    return shutil.which("ffmpeg") is not None
+    try:
+        _get_ffmpeg_path()
+        return True
+    except RuntimeError:
+        return False
 
 
 def _get_ffmpeg_path() -> str:
     path = shutil.which("ffmpeg")
     if path is None:
+        try:
+            import imageio_ffmpeg
+
+            bundled_path = imageio_ffmpeg.get_ffmpeg_exe()
+            if os.path.isfile(bundled_path):
+                path = bundled_path
+        except (ImportError, RuntimeError):
+            pass
+    if path is None:
         raise RuntimeError(
-            "ffmpeg was not found on your system PATH.\n\n"
-            "Install it first:\n"
+            "系统 PATH 中未找到 ffmpeg。\n\n"
+            "请先安装：\n"
             "  • macOS:  brew install ffmpeg\n"
             "  • Windows: winget install ffmpeg\n"
-            "              …or download from https://ffmpeg.org/download.html\n"
-            "Then restart this app."
+            "              …或前往 https://ffmpeg.org/download.html 下载\n"
+            "安装后请重新启动本应用。"
         )
     return path
 
@@ -68,6 +81,7 @@ def write_video_ffmpeg(
     fps: float,
     output_path: str,
     crf: int = 18,
+    progress=None,
 ) -> None:
     """Encode a stack of BGR frames to H.264 MP4 via an ffmpeg pipe."""
     ffmpeg = _get_ffmpeg_path()
@@ -89,9 +103,15 @@ def write_video_ffmpeg(
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
     assert proc.stdin is not None
     try:
-        proc.stdin.write(frames.tobytes())
+        total = max(int(_n), 1)
+        for idx, frame in enumerate(frames):
+            proc.stdin.write(frame.tobytes())
+            if progress is not None:
+                progress((idx + 1) / total)
         proc.stdin.close()
-        proc.wait(timeout=300)
+        returncode = proc.wait(timeout=300)
+        if returncode != 0:
+            raise RuntimeError(f"ffmpeg 编码失败，退出码 {returncode}")
     except Exception:
         proc.kill()
         raise

@@ -1,19 +1,28 @@
 # ------------------------------------------------------------------
-# Depth Video Converter — Python dependencies
+# DepthuVideoConverter — Python dependencies
 #
 # Install:  pip install -r requirements.txt
 # ------------------------------------------------------------------
 
 # --- Legacy Web UI compatibility (not used by the native desktop entry) ---
 gradio>=4.0,<6.0
+huggingface_hub<1.0
+pydantic<2.11
+
+# --- Native desktop UI ---
+PySide6-Essentials>=6.7,<6.8
+PySide6-Addons>=6.7,<6.8
 
 # --- Deep-learning runtime ---
-torch>=2.1
-torchvision>=0.16
+--extra-index-url https://download.pytorch.org/whl/cu126
+onnxruntime>=1.17
+torch==2.13.0+cu126; platform_system == "Windows"
+torch>=2.2,<3.0; platform_system == "Darwin"
 
 # --- Image / video processing ---
 opencv-python>=4.8
 numpy>=1.24
+imageio-ffmpeg>=0.6
 
 # --- Historical REST API compatibility (not used by the native desktop entry) ---
 fastapi>=0.110
@@ -25,3 +34,6 @@ PySide6>=6.7
 
 # --- Not required but recommended ---
 # accelerate>=0.25   (optional — speeds model loading on multi-GPU setups)
+
+# --- macOS desktop window ---
+pyobjc-framework-Cocoa>=10.0; platform_system == "Darwin"

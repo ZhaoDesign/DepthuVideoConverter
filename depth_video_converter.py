@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Depth Video Converter — Convert any video to a depth-map video using Depth Anything V2.
+DepthuVideoConverter — Convert video to depth-map control video using Depth Anything V2.
 
 Features:
   - Gradio Web UI with MP4 / MOV upload
@@ -19,38 +19,67 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 import gradio as gr
-import torch
 
 # Shared core library — all domain logic lives here
 from depth_converter import (
     MODEL_DEFS,
     MODELS_DIR,
-    RESOLUTION_PRESETS,
     detect_device,
     ffmpeg_available,
-    process_video,
+    media_kind_for_path,
+    process_media,
 )
+
+APP_TITLE = "DepthuVideoConverter"
+MODEL_LABELS = list(MODEL_DEFS.keys())
+DEFAULT_MODEL_LABEL = MODEL_LABELS[0]
 
 
 # ---------------------------------------------------------------------------
 # Gradio adapter — catch RuntimeError and re-raise as gr.Error for the UI
 # ---------------------------------------------------------------------------
 
-def _process_video_for_gradio(
-    input_video_path: str,
+CLOSE_TAB_CONFIRM_HEAD = """
+<script>
+(() => {
+    window.addEventListener("beforeunload", (event) => {
+        event.preventDefault();
+        event.returnValue = "";
+    });
+})();
+</script>
+"""
+
+
+def _is_desktop_mode() -> bool:
+    return os.environ.get("DEPTH_DESKTOP_MODE") == "1"
+
+
+def _torch_version() -> str:
+    try:
+        import importlib
+
+        torch = importlib.import_module("torch")
+        return torch.__version__
+    except Exception:
+        return "未安装"
+
+def _process_media_for_gradio(
+    input_media_path: str,
     model_size_label: str,
     resolution_choice: str,
     invert_bw: bool,
     smoothing_strength: float,
     preserve_audio: bool,
     progress: gr.Progress = gr.Progress(),
-) -> str:
-    """Thin adapter: calls the shared ``process_video``, wraps errors for Gradio."""
+) -> tuple[dict, dict]:
+    """Call the shared processor and expose errors through the Gradio UI."""
     try:
-        return process_video(
-            input_video_path=input_video_path,
+        output_path = process_media(
+            input_path=input_media_path,
             model_size_label=model_size_label,
             resolution_choice=resolution_choice,
             invert_bw=invert_bw,
@@ -58,8 +87,34 @@ def _process_video_for_gradio(
             preserve_audio=preserve_audio,
             progress=progress,
         )
+        if media_kind_for_path(output_path) == "image":
+            return (
+                gr.update(value=None, visible=False),
+                gr.update(value=output_path, visible=True),
+            )
+        return (
+            gr.update(value=output_path, visible=True),
+            gr.update(value=None, visible=False),
+        )
     except RuntimeError as e:
         raise gr.Error(str(e))
+
+
+def _shutdown_desktop_app() -> None:
+    """Stop the packaged desktop process after Gradio sends the click response."""
+    gr.Info("应用正在退出…")
+    _schedule_desktop_shutdown()
+
+
+def _shutdown_desktop_app_from_browser_close() -> None:
+    """Stop the packaged desktop process after the browser tab is closed."""
+    _schedule_desktop_shutdown(delay=0.35)
+
+
+def _schedule_desktop_shutdown(delay: float = 0.75) -> None:
+    timer = threading.Timer(delay, lambda: os._exit(0))
+    timer.daemon = True
+    timer.start()
 
 
 # ---------------------------------------------------------------------------
@@ -85,43 +140,55 @@ CSS = """
 def create_ui() -> gr.Blocks:
     device_str, device_desc = detect_device()
     badge_class = {"cuda": "device-cuda", "mps": "device-mps"}.get(device_str, "device-cpu")
-    device_html = f'<div class="device-badge {badge_class}">🖥  {device_desc}</div>'
+    if device_str == "mps":
+        device_label = "Apple 芯片（MPS）"
+    elif device_str == "cuda":
+        device_label = f"NVIDIA 显卡（{device_desc}）"
+    else:
+        device_label = "CPU（无 GPU 加速）"
+    device_html = f'<div class="device-badge {badge_class}">🖥  {device_label}</div>'
 
-    with gr.Blocks(css=CSS, title="Depth Video Converter") as demo:
+    head = CLOSE_TAB_CONFIRM_HEAD if _is_desktop_mode() else None
+
+    with gr.Blocks(css=CSS, title=APP_TITLE, head=head) as demo:
         gr.Markdown(
-            """# 🎥 Depth Video Converter
-Convert any MP4 / MOV video into a **grayscale depth-map video**
-using [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2).
+            """# DepthuVideoConverter
+使用 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)，
+将 MP4 / MOV 视频转换为**灰度深度/轮廓控制视频**，方便作为 AI 视频生成、动画参考和空间运动控制素材。
             """
         )
         gr.HTML(device_html)
 
         with gr.Row():
             with gr.Column(scale=1):
-                input_video = gr.Video(
-                    label="Upload Video",
-                    sources=["upload"],
-                    format="mp4",
+                input_media = gr.File(
+                    label="上传视频或图片",
+                    type="filepath",
                 )
 
                 model_size = gr.Dropdown(
-                    choices=list(MODEL_DEFS.keys()),
-                    value="Small (fastest, ~95 MB)",
-                    label="Model Size",
-                    info="Larger models produce better depth maps but run slower.",
+                    choices=MODEL_LABELS,
+                    value=DEFAULT_MODEL_LABEL,
+                    label="模型大小",
+                    info="模型越大，深度图质量越高，但处理速度越慢。",
                 )
 
                 resolution = gr.Dropdown(
-                    choices=list(RESOLUTION_PRESETS.keys()),
+                    choices=[
+                        ("原始分辨率", "Original"),
+                        ("480p（按原视频比例，高度 480）", "480p"),
+                        ("720p（按原视频比例，高度 720）", "720p"),
+                        ("1080p（按原视频比例，高度 1080）", "1080p"),
+                    ],
                     value="Original",
-                    label="Output Resolution",
-                    info="Downscale to speed up processing.",
+                    label="输出分辨率",
+                    info="按上传视频比例缩放，不会强制改成 16:9。",
                 )
 
                 invert = gr.Checkbox(
                     value=False,
-                    label="Invert Black & White",
-                    info="Swap near ↔ far.  Usually near = bright, far = dark.",
+                    label="黑白反转",
+                    info="交换远近区域的明暗。通常近处较亮，远处较暗。",
                 )
 
                 smoothing = gr.Slider(
@@ -129,38 +196,53 @@ using [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2).
                     maximum=100,
                     value=60,
                     step=1,
-                    label="Temporal Smoothing",
-                    info="Higher values reduce flicker but may cause ghosting.",
+                    label="时序平滑",
+                    info="数值越高，画面闪烁越少，但可能出现拖影。",
                 )
 
                 preserve_audio = gr.Checkbox(
                     value=True,
-                    label="Preserve Original Audio",
-                    info="Copy the original audio track into the depth video (requires ffmpeg).",
+                    label="保留原始音频",
+                    info="将原视频音轨合并到深度视频中（需要 ffmpeg）。",
                 )
 
-                process_btn = gr.Button("⚙ Process Video", variant="primary", size="lg")
+                process_btn = gr.Button("⚙ 开始转换", variant="primary", size="lg")
 
             with gr.Column(scale=1):
                 output_video = gr.Video(
-                    label="Output Depth Video",
+                    label="输出深度视频",
                     format="mp4",
                     autoplay=True,
                 )
+                output_image = gr.Image(
+                    label="输出深度图",
+                    type="filepath",
+                    visible=False,
+                )
 
         process_btn.click(
-            fn=_process_video_for_gradio,
-            inputs=[input_video, model_size, resolution, invert, smoothing, preserve_audio],
-            outputs=output_video,
+            fn=_process_media_for_gradio,
+            inputs=[input_media, model_size, resolution, invert, smoothing, preserve_audio],
+            outputs=[output_video, output_image],
         )
+
+        if _is_desktop_mode():
+            shutdown_btn = gr.Button("退出应用", variant="secondary", size="sm")
+            shutdown_btn.click(
+                fn=_shutdown_desktop_app,
+                inputs=None,
+                outputs=None,
+                show_progress="hidden",
+            )
+            demo.unload(_shutdown_desktop_app_from_browser_close)
 
         gr.Markdown(
             """---
-### 📋 Tips
-- Models are **auto-downloaded on first use** from Hugging Face.  Subsequent runs load from the local `models/` directory instantly.
-- **Temporal smoothing** blends consecutive depth frames to reduce flicker.  Start at 60 and adjust.
-- **Audio preservation** copies the original audio into the output.
-- Everything runs **100 % locally** — nothing is uploaded anywhere.
+### 📋 使用提示
+- 首次使用时会从 Hugging Face **自动下载模型**，之后将直接加载本地 `models/` 目录中的模型。
+- **时序平滑**会融合相邻深度帧以减少闪烁，建议从 60 开始调整。
+- 开启**保留原始音频**后，原视频音轨会合并到输出视频中。
+- 所有处理均在**本地运行**，视频不会上传到任何服务器。
             """
         )
 
@@ -173,34 +255,34 @@ using [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2).
 
 def main() -> None:
     print("=" * 58)
-    print("  Depth Video Converter — Depth Anything V2 + Gradio")
+    print(f"  {APP_TITLE} — Depth Anything V2 + Gradio")
     print("=" * 58)
 
     device_str, device_desc = detect_device()
-    print(f"  Detected device : {device_desc}")
+    print(f"  检测到的设备    : {device_desc}")
 
     ffmpeg_found = ffmpeg_available()
-    print(f"  ffmpeg          : {'found' if ffmpeg_found else 'NOT FOUND'}")
+    print(f"  ffmpeg           : {'✅ 已找到' if ffmpeg_found else '❌ 未找到'}")
     if not ffmpeg_found:
         print()
-        print("  Warning: ffmpeg is required for video encoding and audio handling.")
-        print("     Install it before processing videos:")
+        print("  ⚠  视频编码和音频处理需要 ffmpeg。")
+        print("     请先安装，再处理视频：")
         print("       macOS:   brew install ffmpeg")
         print("       Windows: winget install ffmpeg")
         print()
 
     # Check for model files
-    print(f"  Models directory: {MODELS_DIR}")
+    print(f"  模型目录         : {MODELS_DIR}")
     for label, cfg in MODEL_DEFS.items():
         p = cfg["path"]
         if p.is_file():
-            status = f"ready ({p.stat().st_size / 1e6:.0f} MB)"
+            status = f"✅ ({p.stat().st_size / 1e6:.0f} MB)"
         else:
-            status = "auto-download on first use"
+            status = "⬇  首次使用时自动下载"
         print(f"    {status}  {label}")
 
     print(f"  Python          : {sys.version.split()[0]}")
-    print(f"  PyTorch         : {torch.__version__}")
+    print(f"  PyTorch         : {_torch_version()}")
     print(f"  Gradio          : {gr.__version__}")
     print("=" * 58)
     print()

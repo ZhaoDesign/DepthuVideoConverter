@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+os.environ.setdefault("DEPTH_BACKEND", "torch")
 
 
 def _fail(message: str) -> None:
@@ -57,14 +58,9 @@ def _check_core() -> None:
     sys.path.insert(0, str(ROOT))
     from depth_converter import MODEL_DEFS, MODELS_DIR, RESOLUTION_PRESETS, ffmpeg_available
 
-    expected_models = {
-        "Small (fastest, ~95 MB)",
-        "Base (balanced, ~372 MB)",
-        "Large (best quality, ~1.2 GB)",
-    }
-    if set(MODEL_DEFS) != expected_models:
+    if len(MODEL_DEFS) != 3 or not all(any(name.startswith(label) for name in MODEL_DEFS) for label in ("Small", "Base", "Large")):
         _fail(f"模型菜单不完整：{sorted(MODEL_DEFS)}")
-    if not RESOLUTION_PRESETS:
+    if not RESOLUTION_PRESETS or not {"Original", "480p", "720p", "1080p"}.issubset(RESOLUTION_PRESETS):
         _fail("分辨率预设为空")
     if not ffmpeg_available():
         _fail("FFmpeg 不可用")
@@ -76,6 +72,8 @@ def _check_core() -> None:
 
 def _check_ui() -> None:
     code = """
+import os
+os.environ.setdefault('DEPTH_BACKEND', 'torch')
 from PySide6.QtWidgets import QApplication
 from desktop_qt_app import ContourControlWindow, MODEL_DEFS, WINDOW_HEIGHT, WINDOW_WIDTH
 app = QApplication([])

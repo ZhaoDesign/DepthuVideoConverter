@@ -1,0 +1,8 @@
+PySide6-Essentials==6.7.3
+PySide6-Addons==6.7.3
+shiboken6==6.7.3
+torch==2.13.0+cu126
+onnxruntime==1.18.1
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+imageio-ffmpeg==0.6.0

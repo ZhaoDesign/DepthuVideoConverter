@@ -11,7 +11,7 @@
 
 ## 本次迁移与修复内容
 
-- `desktop_qt_app.py`：参考项目主窗口迁移、PySide6 原生交互、模型/输出/转换状态修复、下拉弹窗定位、焦点框修复、播放器圆角/关闭/窗口内放大。
+- `desktop_qt_app.py`：参考项目主窗口迁移、PySide6 原生交互、视频/图片输入、模型/输出/转换状态修复、下拉弹窗定位、焦点框修复、播放器圆角/关闭/窗口内放大。
 - `desktop_launcher.py`：稳定原生桌面入口。
 - `start_desktop.cmd`：Windows 双击启动入口，使用 CRLF 换行。
 - `assets/`：参考项目 UI 所需图标资源。
@@ -20,6 +20,7 @@
 - `docs/DELIVERY_CHECKLIST_CN.md`：交付边界与自检说明。
 - `depth_converter/ffmpeg.py`：音频 FFmpeg 输出解码修复。
 - `depth_converter/models.py`：模型目录和缓存修复。
+- 远程上游核心合并：单张图片深度图、按原比例分辨率、可选 ONNX 后端和更详细的模型下载进度；原生桌面入口显式使用本地 PyTorch。
 - `depth_converter/__init__.py`、`README.md`、`README_CN.md`、`requirements.txt`、`docs/ARCHITECTURE.md`、`docs/DEV_PLAN.md`：明确当前原生桌面方向，保留历史 Web/Tauri 记录但不恢复。
 
 ## 推送前检查
