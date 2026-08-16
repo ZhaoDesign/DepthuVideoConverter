@@ -37,8 +37,12 @@ def has_audio_stream(video_path: str) -> bool:
         "-vn", "-sn", "-dn",
         "-f", "null", "-",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return "Audio:" in result.stderr
+    # Keep stderr as bytes.  FFmpeg diagnostics can contain characters that
+    # are not decodable with Windows' active console code page (often GBK).
+    # The stream marker itself is ASCII, so no locale-dependent decoding is
+    # needed here.
+    result = subprocess.run(cmd, capture_output=True)
+    return b"Audio:" in result.stderr
 
 
 def extract_audio(video_path: str, output_audio_path: str) -> bool:
@@ -55,7 +59,7 @@ def extract_audio(video_path: str, output_audio_path: str) -> bool:
         "-b:a", "192k",
         output_audio_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True)
     return result.returncode == 0
 
 

@@ -4,7 +4,7 @@
 # Install:  pip install -r requirements.txt
 # ------------------------------------------------------------------
 
-# --- Web UI ---
+# --- Legacy Web UI compatibility (not used by the native desktop entry) ---
 gradio>=4.0,<6.0
 
 # --- Deep-learning runtime ---
@@ -15,10 +15,13 @@ torchvision>=0.16
 opencv-python>=4.8
 numpy>=1.24
 
-# --- REST API server (desktop sidecar) ---
+# --- Historical REST API compatibility (not used by the native desktop entry) ---
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
+
+# --- Native desktop UI ---
+PySide6>=6.7
 
 # --- Not required but recommended ---
 # accelerate>=0.25   (optional — speeds model loading on multi-GPU setups)

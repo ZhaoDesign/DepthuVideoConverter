@@ -180,10 +180,10 @@ def main() -> None:
     print(f"  Detected device : {device_desc}")
 
     ffmpeg_found = ffmpeg_available()
-    print(f"  ffmpeg          : {'✅ found' if ffmpeg_found else '❌ NOT FOUND'}")
+    print(f"  ffmpeg          : {'found' if ffmpeg_found else 'NOT FOUND'}")
     if not ffmpeg_found:
         print()
-        print("  ⚠  ffmpeg is required for video encoding and audio handling.")
+        print("  Warning: ffmpeg is required for video encoding and audio handling.")
         print("     Install it before processing videos:")
         print("       macOS:   brew install ffmpeg")
         print("       Windows: winget install ffmpeg")
@@ -194,9 +194,9 @@ def main() -> None:
     for label, cfg in MODEL_DEFS.items():
         p = cfg["path"]
         if p.is_file():
-            status = f"✅ ({p.stat().st_size / 1e6:.0f} MB)"
+            status = f"ready ({p.stat().st_size / 1e6:.0f} MB)"
         else:
-            status = "⬇  auto-download on first use"
+            status = "auto-download on first use"
         print(f"    {status}  {label}")
 
     print(f"  Python          : {sys.version.split()[0]}")

@@ -31,10 +31,26 @@
 
 ## 快速开始
 
+### 原生桌面端（当前主入口）
+
+```bash
+python desktop_launcher.py
+```
+
+Windows 虚拟环境：
+
+```powershell
+.\venv\Scripts\python.exe desktop_launcher.py
+```
+
+也可以直接双击项目目录中的 `start_desktop.cmd`。
+
+这是当前迁移后的主界面：使用 PySide6 原生窗口，直接调用本地转换核心，不启动在线队列、Web 服务或 Tauri。支持拖入视频、预览、选择模型/分辨率、时序平滑、保留音频，并将结果保存到本地文件夹。
+
 ### CLI（最简单）
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
+git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
@@ -47,17 +63,19 @@ python depth_video_cli.py your-video.mp4 -m "Base (balanced, ~372 MB)"
 > **Claude Code 用户？** 安装 Skill 后直接说需求：
 > `/depth-video` — "把这段视频转成深度视频，用 Large 模型"
 
-### Web UI（Gradio）
+### 历史 Web UI（不作为当前桌面入口）
 
 ```bash
 python depth_video_converter.py
 # → http://127.0.0.1:7860
 ```
 
-### Docker
+`desktop_qt_app.py` 是桌面窗口实现文件；日常启动请使用上面的 `desktop_launcher.py`。
+
+### 历史 Docker/Web 运行方式
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
+git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 docker compose up
 ```
@@ -97,4 +115,4 @@ Base 是推荐之选。CUDA 会比 MPS 快约 2–4 倍。
 MIT。[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) 使用 Apache 2.0。
 
 模型来自 Hugging Face [depth-anything](https://huggingface.co/depth-anything)。
-基于 [Gradio](https://www.gradio.app/)、[OpenCV](https://opencv.org/)、[ffmpeg](https://ffmpeg.org/) 构建。
+当前原生桌面端基于 [PySide6](https://doc.qt.io/qtforpython/)、[OpenCV](https://opencv.org/)、[FFmpeg](https://ffmpeg.org/) 和 PyTorch 构建。Gradio/FastAPI 依赖仅为历史兼容路径保留，不属于当前桌面入口。

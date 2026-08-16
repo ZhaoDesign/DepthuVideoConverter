@@ -1,4 +1,6 @@
-# Development Plan — Desktop App (Tauri + FastAPI Sidecar)
+# Development Plan — Native PySide6 Desktop
+
+> **Current local direction (2026-08-17):** The supported application is the native PySide6 entry point `desktop_launcher.py` → `desktop_qt_app.py` → `depth_converter/`. Keep the reference project's two-panel layout and interaction model, repair local interaction bugs, and run conversion in the local Python process. Do not restore the online queue, Web UI, or Tauri shell.
 
 > **Plan version:** 1.0  
 > **Created:** 2026-07-23  
@@ -6,6 +8,22 @@
 > **Reference:** [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
+
+## Current execution plan
+
+The active work is intentionally small and local:
+
+1. Preserve the reference project's main-window structure and visual hierarchy.
+2. Keep the native file picker, drag-and-drop, source/output previews, model and resolution controls, audio toggle, progress, and local output actions reliable.
+3. Keep model files local and prefer the project's `models/` directory when it contains a checkpoint.
+4. Validate real conversion, audio muxing, resolution scaling, repeated output naming, and the Windows launcher.
+5. Use `python verify_desktop_delivery.py` before handing off a local project directory.
+
+The current delivery is a project-directory + virtual-environment delivery. A PyInstaller or Inno Setup installer is deliberately not generated until the native PyTorch/FFmpeg/model bundling boundary is specified.
+
+## Historical migration plan (reference only)
+
+The sections below document the earlier cloud/Tauri design and are not an active implementation checklist. They remain for migration traceability; do not resume them as part of the local restoration.
 
 ## Overview
 

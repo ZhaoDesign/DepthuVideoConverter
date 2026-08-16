@@ -12,6 +12,11 @@ venv/
 # Model checkpoint files (too large for git)
 models/*.pth
 
+# Local downloads and temporary UI regression artifacts
+downloads/
+ui-regression-artifacts/
+ui-check-player.png
+
 # macOS
 .DS_Store
 

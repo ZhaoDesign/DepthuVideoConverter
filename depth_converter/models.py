@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.request import urlretrieve
@@ -16,7 +17,7 @@ from depth_anything_v2 import DepthAnythingV2
 # ---------------------------------------------------------------------------
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = PROJECT_DIR / "models"
+MODELS_DIR = Path(os.environ.get("DEPTH_MODELS_DIR", PROJECT_DIR / "models")).expanduser()
 
 MODEL_DEFS: Dict[str, dict] = {
     "Small (fastest, ~95 MB)": {
@@ -51,6 +52,16 @@ RESOLUTION_PRESETS: Dict[str, Optional[Tuple[int, int]]] = {
 
 # Global model cache — lazy load, keep at most one model in memory
 _cached_model: Optional[Tuple[DepthAnythingV2, str]] = None  # (model, model_size_label)
+
+
+def clear_model_cache() -> None:
+    """Release the currently cached model before changing its search path."""
+    global _cached_model
+    if _cached_model is None:
+        return
+    del _cached_model
+    _cached_model = None
+    gc.collect()
 
 
 # ---------------------------------------------------------------------------

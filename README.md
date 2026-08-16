@@ -32,10 +32,26 @@ Original (left) vs Depth Map (right)
 
 ## Quick Start
 
+### Native desktop app (current primary entry point)
+
+```bash
+python desktop_launcher.py
+```
+
+On Windows with the project virtual environment:
+
+```powershell
+.\venv\Scripts\python.exe desktop_launcher.py
+```
+
+You can also double-click `start_desktop.cmd` in the project folder.
+
+This is the current migrated interface: a native PySide6 window that calls the local conversion core directly. It does not start an online queue, a web service, or Tauri. It supports drag-and-drop video preview, model and resolution selection, temporal smoothing, audio preservation, and local output files.
+
 ### CLI (simplest)
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
+git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
@@ -48,17 +64,19 @@ Models auto-download on first use.
 > **Claude Code user?** Install the skill and just say what you want:
 > `/depth-video` — "convert this video to depth, use Large model"
 
-### Web UI (Gradio)
+### Historical Web UI (not the current desktop entry point)
 
 ```bash
 python depth_video_converter.py
 # → http://127.0.0.1:7860
 ```
 
-### Docker
+`desktop_qt_app.py` contains the desktop window implementation; use `desktop_launcher.py` for normal startup.
+
+### Historical Docker/Web workflow
 
 ```bash
-git clone https://github.com/SwiftSteed/DepthVideoConverter.git
+git clone https://github.com/ZhaoDesign/DepthuVideoConverter.git
 cd DepthVideoConverter
 docker compose up
 ```
@@ -98,4 +116,4 @@ Base is the sweet spot. CUDA is ~2–4× faster depending on GPU.
 MIT. [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) is Apache 2.0.
 
 Models from [depth-anything](https://huggingface.co/depth-anything) on Hugging Face.
-Built with [Gradio](https://www.gradio.app/), [OpenCV](https://opencv.org/), [ffmpeg](https://ffmpeg.org/).
+The supported native desktop entry is built with [PySide6](https://doc.qt.io/qtforpython/), [OpenCV](https://opencv.org/), [FFmpeg](https://ffmpeg.org/), and PyTorch. Gradio/FastAPI dependencies remain only for historical compatibility and are not part of the current desktop entry.

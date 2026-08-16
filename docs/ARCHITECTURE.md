@@ -1,5 +1,7 @@
 # Depth Video Converter — Architecture
 
+> **Current local direction (2026-08-14):** The supported application path is `desktop_launcher.py` → `desktop_qt_app.py` → `depth_converter/`. The UI is a native PySide6 window modeled on the reference project, and conversion runs directly in the local Python process. The Tauri/FastAPI/Web sections below are historical reference only and are not part of the current local restoration scope.
+
 > **Version:** 2.0  
 > **Last updated:** 2026-07-23  
 > **Status:** Draft
@@ -26,28 +28,26 @@
 
 ## Overview
 
-Depth Video Converter (v2.0) is a multi-interface video depth-estimation tool:
+Depth Video Converter is currently maintained as a native local desktop video depth-estimation tool:
 
 | Interface | Entrypoint | Target user |
 |---|---|---|
-| **CLI / library** | `from depth_converter import process_video` | Devs, scripts |
-| **Gradio Web UI** | `python depth_video_converter.py` | Quick local use |
-| **FastAPI server** | `python -m server.main` | API consumers, desktop shell |
-| **Desktop app** | Double-click `.dmg` / `.exe` | End users (no terminal) |
+| **Native desktop app** | `python desktop_launcher.py` | End users |
+| **CLI / library** | `from depth_converter import process_video` | Developers and scripts |
 
-All four interfaces share a single **pure-Python core** (`depth_converter/`). No code is duplicated.
+The supported desktop path uses one **pure-Python core** (`depth_converter/`) directly. The old Gradio, FastAPI, and Tauri paths remain in this document only as migration history; they are not restored by the current local work.
 
 ---
 
 ## Design principles
 
-1. **Zero disruption** — The existing Gradio entrypoint, CLI, and README remain untouched in behavior. Any existing user's workflow must work identically after the refactor.
+1. **Native-first local workflow** — The PySide6 entrypoint is the primary user workflow and does not start an online queue, Web service, or Tauri shell.
 
 2. **Single source of truth** — The inference pipeline, model loading, FFmpeg helpers, and smoothing exist in exactly one place: `depth_converter/`.
 
-3. **Python stays Python** — The Depth Anything V2 model is PyTorch; there is no Rust rewrite of the core logic. The desktop shell communicates with Python via local HTTP (localhost only).
+3. **Python stays Python** — The Depth Anything V2 model is PyTorch; there is no Rust rewrite of the core logic. The native window calls the local Python core directly.
 
-4. **Thin desktop shell** — The Tauri app is a UI shell + process manager. All heavy lifting stays in Python. The Rust side only spawns the Python sidecar and proxies frontend requests.
+4. **Thin native UI layer** — The PySide6 window owns presentation and user interaction; all heavy lifting stays in Python core modules.
 
 5. **Independent deployability** — Each interface can be run in isolation. The desktop app bundles its own Python environment.
 

@@ -3,9 +3,12 @@
 This package contains all domain logic for depth-video conversion.
 It is UI-agnostic and is consumed by:
 
-- ``depth_video_converter.py``  — Gradio web UI (original interface)
-- ``server/``                    — FastAPI sidecar (for desktop app)
+- ``desktop_qt_app.py``          — supported native PySide6 desktop UI
+- ``depth_video_converter.py``   — legacy Gradio compatibility UI
 - Direct ``import``              — CLI scripts / library usage
+
+The old ``server/`` FastAPI path is retained as historical compatibility code;
+the supported local desktop path does not start a server or an online queue.
 """
 
 from .core import process_video, ProgressCallback
@@ -16,6 +19,7 @@ from .models import (
     PROJECT_DIR,
     RESOLUTION_PRESETS,
     detect_device,
+    clear_model_cache,
     download_with_progress,
     ensure_checkpoint,
     load_model,
@@ -31,6 +35,7 @@ __all__ = [
     "PROJECT_DIR",
     "RESOLUTION_PRESETS",
     "detect_device",
+    "clear_model_cache",
     "download_with_progress",
     "ensure_checkpoint",
     "load_model",
