@@ -74,14 +74,39 @@ def _check_ui() -> None:
     code = """
 import os
 os.environ.setdefault('DEPTH_BACKEND', 'torch')
-from PySide6.QtWidgets import QApplication
-from desktop_qt_app import ContourControlWindow, MODEL_DEFS, WINDOW_HEIGHT, WINDOW_WIDTH
+from PySide6.QtWidgets import QApplication, QFrame
+from desktop_qt_app import (
+    ContourControlWindow,
+    InlineVideoOverlay,
+    MODEL_DEFS,
+    VideoPlayer,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
 app = QApplication([])
 window = ContourControlWindow()
 assert window.width() == WINDOW_WIDTH, (window.width(), WINDOW_WIDTH)
 assert window.height() == WINDOW_HEIGHT, (window.height(), WINDOW_HEIGHT)
 assert len(MODEL_DEFS) == 3, MODEL_DEFS
 assert window.model_combo.count() == 3, window.model_combo.count()
+window.resize(1600, 1000)
+window.show()
+app.processEvents()
+panels = window.findChildren(QFrame, 'panel')
+players = window.findChildren(VideoPlayer)
+assert len(panels) == 2 and all(panel.width() > 500 for panel in panels), [(p.width(), p.height()) for p in panels]
+window.input_media_stack.setCurrentWidget(window._src_player)
+app.processEvents()
+assert all(player._video_box.width() > 500 for player in players), [(p._video_box.width(), p._video_box.height()) for p in players]
+window.resize(900, 680)
+app.processEvents()
+assert all(player._video_box.width() <= 390 for player in players), [(p._video_box.width(), p._video_box.height()) for p in players]
+overlay = InlineVideoOverlay(window.centralWidget(), '', 0, 0.8, False, False)
+overlay.setGeometry(window.centralWidget().rect())
+assert not overlay.isWindow()
+assert overlay._slider is not None and overlay._volume_slider is not None
+overlay.close()
+app.processEvents()
 window.close()
 app.quit()
 print('UI_OK')
@@ -97,7 +122,7 @@ print('UI_OK')
     )
     if result.returncode or "UI_OK" not in result.stdout:
         _fail(result.stderr.strip() or result.stdout.strip() or "Qt 界面自检失败")
-    print("PASS: native PySide6 window (1110x852, 3 models)")
+    print("PASS: native PySide6 window, responsive layout, inline preview overlay (3 models)")
 
 
 def _check_launcher() -> None:

@@ -26,6 +26,8 @@ MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
 
 WINDOW_WIDTH = 1110
 WINDOW_HEIGHT = 852
+MIN_WINDOW_WIDTH = 900
+MIN_WINDOW_HEIGHT = 680
 TITLE_BAR_HEIGHT = 36
 PANEL_WIDTH = 527
 PANEL_HEIGHT = 792
@@ -33,6 +35,8 @@ INNER_WIDTH = 495
 VIDEO_SURFACE_HEIGHT = 321
 TRANSPORT_HEIGHT = 36
 MEDIA_AREA_HEIGHT = VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT
+MIN_VIDEO_WIDTH = 320
+MIN_VIDEO_SURFACE_HEIGHT = 190
 
 MODEL_DISPLAY_LABELS = {
     "Small (fastest, ~95 MB)": "Small（最快，约 95 MB）",
@@ -139,7 +143,7 @@ def _show_native_error(title: str, message: str) -> None:
 
 try:
     from PySide6.QtCore import QPoint, QRect, QRectF, QObject, QSize, Qt, QThread, QTimer, QUrl, Signal  # noqa: E402
-    from PySide6.QtGui import QAction, QBitmap, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QFontDatabase, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap  # noqa: E402
+    from PySide6.QtGui import QAction, QColor, QDesktopServices, QDragEnterEvent, QDropEvent, QFont, QFontDatabase, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap  # noqa: E402
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer  # noqa: E402
     from PySide6.QtMultimediaWidgets import QVideoWidget  # noqa: E402
     from PySide6.QtWidgets import (  # noqa: E402
@@ -445,11 +449,12 @@ class StaticTransportControls(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("transportControls")
-        self.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+        self.setFixedHeight(TRANSPORT_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         controls = QHBoxLayout(self)
         controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(12)
+        controls.setSpacing(8)
 
         self._play_btn = IconButton("icon-play.png", self, size=32)
         controls.addWidget(self._play_btn)
@@ -457,13 +462,13 @@ class StaticTransportControls(QFrame):
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 100)
         self._slider.setValue(0)
-        self._slider.setMinimumWidth(160)
+        self._slider.setMinimumWidth(80)
         controls.addWidget(self._slider, 1)
 
         self._time_label = QLabel("0:00 / 0:00")
         self._time_label.setObjectName("muted")
         self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._time_label.setFixedWidth(88)
+        self._time_label.setFixedWidth(72)
         controls.addWidget(self._time_label)
 
         self._mute_btn = IconButton("icon-volume.png", self, size=32)
@@ -473,7 +478,7 @@ class StaticTransportControls(QFrame):
         self._volume_slider.setObjectName("volumeSlider")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(88)
+        self._volume_slider.setFixedWidth(64)
         controls.addWidget(self._volume_slider)
 
 
@@ -818,12 +823,39 @@ class TopBar(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
-class FullscreenVideoDialog(QDialog):
-    """Window-contained enlarged player with native minimize/close controls."""
+class RoundedCornerOverlay(QWidget):
+    """Paints smooth corner cover pixels without a jagged 1-bit widget mask."""
+
+    def __init__(self, parent: QWidget, radius: int = 16, color: QColor | str = "#F9FAFB") -> None:
+        super().__init__(parent)
+        self._radius = radius
+        self._color = QColor(color)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def set_color(self, color: QColor | str) -> None:
+        self._color = QColor(color)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        outer = QPainterPath()
+        outer.addRect(QRectF(self.rect()))
+        inner = QPainterPath()
+        inner.addRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), self._radius, self._radius)
+        painter.fillPath(outer.subtracted(inner), self._color)
+        painter.end()
+
+
+class InlineVideoOverlay(QFrame):
+    """An enlarged player layered over the existing window, never a new window."""
+
+    closed = Signal(int, float, bool, bool)
 
     def __init__(
         self,
-        parent: QWidget | None,
+        parent: QWidget,
         path: str,
         position: int,
         volume: float,
@@ -831,34 +863,81 @@ class FullscreenVideoDialog(QDialog):
         should_play: bool,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("fullscreenOverlay")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._path = path
         self._position = max(0, position)
         self._should_play = should_play
-        self.setWindowTitle("视频预览")
-        self.setWindowFlags(
-            Qt.WindowType.Window
-            | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowSystemMenuHint
-            | Qt.WindowType.WindowMinimizeButtonHint
-            | Qt.WindowType.WindowCloseButtonHint
-        )
-        self.setMinimumSize(640, 420)
-        self.setStyleSheet("QDialog { background: #000000; } QVideoWidget { background: #000000; }")
-
-        parent_window = parent.window() if parent is not None else None
-        parent_rect = parent_window.frameGeometry() if parent_window is not None else QRect(0, 0, 1110, 852)
-        width = max(640, min(1046, parent_rect.width() - 64))
-        height = max(420, min(700, parent_rect.height() - 96))
-        self.resize(width, height)
-        self.move(parent_rect.center() - self.rect().center())
+        self._slider_dragging = False
+        self._duration = 0
+        self._closing = False
+        self.setGeometry(parent.rect())
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(28, 20, 28, 24)
+        layout.setSpacing(14)
 
-        self._video = QVideoWidget(self)
+        header = QHBoxLayout()
+        header.setContentsMargins(8, 0, 0, 0)
+        title = QLabel("视频预览")
+        title.setObjectName("fullscreenTitle")
+        header.addWidget(title)
+        header.addStretch(1)
+        self._close_btn = MouseFocusClearingButton("×", self)
+        self._close_btn.setObjectName("fullscreenCloseButton")
+        self._close_btn.setFixedSize(38, 32)
+        self._close_btn.setToolTip("退出预览")
+        self._close_btn.clicked.connect(self.close)
+        header.addWidget(self._close_btn)
+        layout.addLayout(header)
+
+        self._video_frame = QFrame(self)
+        self._video_frame.setObjectName("fullscreenVideoFrame")
+        self._video_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        video_layout = QVBoxLayout(self._video_frame)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+        self._video = QVideoWidget(self._video_frame)
+        self._video.setObjectName("fullscreenVideoWidget")
+        self._video.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
-        layout.addWidget(self._video)
+        video_layout.addWidget(self._video)
+        layout.addWidget(self._video_frame, 1)
+
+        self._controls = QFrame(self)
+        self._controls.setObjectName("fullscreenControls")
+        self._controls.setFixedHeight(52)
+        controls = QHBoxLayout(self._controls)
+        controls.setContentsMargins(12, 0, 12, 0)
+        controls.setSpacing(8)
+
+        self._play_btn = IconButton("icon-play.png", self._controls, size=34)
+        self._play_btn.clicked.connect(self._toggle_play)
+        controls.addWidget(self._play_btn)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal, self._controls)
+        self._slider.setRange(0, 0)
+        self._slider.sliderPressed.connect(lambda: self._set_slider_dragging(True))
+        self._slider.sliderReleased.connect(self._seek)
+        controls.addWidget(self._slider, 1)
+
+        self._time_label = QLabel("0:00 / 0:00", self._controls)
+        self._time_label.setObjectName("fullscreenTimeLabel")
+        self._time_label.setFixedWidth(90)
+        self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        controls.addWidget(self._time_label)
+
+        self._mute_btn = IconButton("icon-volume.png", self._controls, size=34)
+        self._mute_btn.clicked.connect(self._toggle_mute)
+        controls.addWidget(self._mute_btn)
+
+        self._volume_slider = QSlider(Qt.Orientation.Horizontal, self._controls)
+        self._volume_slider.setObjectName("fullscreenVolumeSlider")
+        self._volume_slider.setRange(0, 100)
+        self._volume_slider.setValue(round(volume * 100))
+        self._volume_slider.setFixedWidth(120)
+        self._volume_slider.valueChanged.connect(self._on_volume_changed)
+        controls.addWidget(self._volume_slider)
 
         self._player = QMediaPlayer(self)
         self._audio = QAudioOutput(self)
@@ -866,35 +945,107 @@ class FullscreenVideoDialog(QDialog):
         self._audio.setMuted(muted)
         self._player.setAudioOutput(self._audio)
         self._player.setVideoOutput(self._video)
+        self._player.positionChanged.connect(self._on_position_changed)
+        self._player.durationChanged.connect(self._on_duration_changed)
+        self._player.playbackStateChanged.connect(self._on_playback_state_changed)
         self._player.mediaStatusChanged.connect(self._on_media_status)
         self._player.setSource(QUrl.fromLocalFile(path))
+        layout.addWidget(self._controls)
+        self._update_volume_icon()
         QTimer.singleShot(0, self._start)
 
     def _start(self) -> None:
         if self._position:
             self._player.setPosition(self._position)
-        self._player.play()
-        if not self._should_play:
-            QTimer.singleShot(180, self._player.pause)
+        if self._should_play:
+            self._player.play()
+        else:
+            self._player.pause()
+
+    def _set_slider_dragging(self, dragging: bool) -> None:
+        self._slider_dragging = dragging
+
+    def _seek(self) -> None:
+        self._slider_dragging = False
+        self._player.setPosition(self._slider.value())
+
+    def _toggle_play(self) -> None:
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _toggle_mute(self) -> None:
+        self._audio.setMuted(not self._audio.isMuted())
+        self._update_volume_icon()
+
+    def _on_volume_changed(self, value: int) -> None:
+        self._audio.setVolume(value / 100)
+        if value > 0 and self._audio.isMuted():
+            self._audio.setMuted(False)
+        if value == 0:
+            self._audio.setMuted(True)
+        self._update_volume_icon()
+
+    def _on_position_changed(self, position: int) -> None:
+        if not self._slider_dragging:
+            self._slider.setValue(position)
+        self._update_time(position, self._duration)
+
+    def _on_duration_changed(self, duration: int) -> None:
+        self._duration = max(0, duration)
+        self._slider.setRange(0, self._duration)
+        self._update_time(self._player.position(), self._duration)
+
+    def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+        self._play_btn.set_icon_name(
+            "icon-pause.png" if state == QMediaPlayer.PlaybackState.PlayingState else "icon-play.png"
+        )
 
     def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status in {
             QMediaPlayer.MediaStatus.LoadedMedia,
             QMediaPlayer.MediaStatus.BufferedMedia,
-        } and self._position:
-            self._player.setPosition(self._position)
+        }:
+            if self._position:
+                self._player.setPosition(self._position)
+            if self._should_play:
+                self._player.play()
+
+    def _update_volume_icon(self) -> None:
+        muted = self._audio.isMuted() or self._volume_slider.value() == 0
+        self._mute_btn.set_icon_name("icon-volume-muted.png" if muted else "icon-volume.png")
+
+    def _update_time(self, position: int, duration: int) -> None:
+        def fmt(ms: int) -> str:
+            secs = max(0, int(ms / 1000))
+            return f"{secs // 60}:{secs % 60:02d}"
+
+        self._time_label.setText(f"{fmt(position)} / {fmt(duration)}")
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
         if event.key() in {Qt.Key.Key_Escape, Qt.Key.Key_F}:
             self.close()
             event.accept()
             return
+        if event.key() == Qt.Key.Key_Space:
+            self._toggle_play()
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        self._player.stop()
-        self._player.setSource(QUrl())
+        if not self._closing:
+            self._closing = True
+            should_play = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            position = self._player.position()
+            volume = self._audio.volume()
+            muted = self._audio.isMuted()
+            self._player.stop()
+            self._player.setSource(QUrl())
+            self.closed.emit(position, volume, muted, should_play)
         super().closeEvent(event)
+        self.deleteLater()
 
 
 class VideoPlayer(QFrame):
@@ -905,11 +1056,14 @@ class VideoPlayer(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("videoPlayer")
-        self.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+        self.setMinimumSize(MIN_VIDEO_WIDTH, MIN_VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._duration = 0
         self._slider_dragging = False
         self._source_path: str | None = None
         self._media_is_image = False
+        self._preview_source: QPixmap | None = None
+        self._fullscreen_overlay: InlineVideoOverlay | None = None
 
         self._player = QMediaPlayer(self)
         self._audio = QAudioOutput(self)
@@ -922,9 +1076,8 @@ class VideoPlayer(QFrame):
 
         self._video_box = QFrame()
         self._video_box.setObjectName("videoSurface")
-        self._video_box.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
-        self._video_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self._apply_rounded_mask(self._video_box)
+        self._video_box.setMinimumSize(MIN_VIDEO_WIDTH, MIN_VIDEO_SURFACE_HEIGHT)
+        self._video_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video_stack = QStackedLayout(self._video_box)
         self._video_stack.setContentsMargins(6, 6, 6, 6)
         self._video_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
@@ -932,20 +1085,27 @@ class VideoPlayer(QFrame):
         self._placeholder = QLabel("尚未加载视频")
         self._placeholder.setObjectName("videoPlaceholder")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder.setMinimumSize(1, 1)
+        self._placeholder.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video_stack.addWidget(self._placeholder)
 
         self._preview = QLabel()
         self._preview.setObjectName("videoPreview")
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview.setMinimumSize(1, 1)
         self._preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video_stack.addWidget(self._preview)
 
         self._video = QVideoWidget()
         self._video.setObjectName("videoWidget")
+        self._video.setMinimumSize(1, 1)
         self._video.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._video.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
         self._video_stack.addWidget(self._video)
         self._video_stack.setCurrentWidget(self._placeholder)
+
+        self._corner_overlay = RoundedCornerOverlay(self._video_box, radius=16, color="#F9FAFB")
+        self._corner_overlay.show()
 
         self._player.setVideoOutput(self._video)
         layout.addWidget(self._video_box, 1)
@@ -968,17 +1128,18 @@ class VideoPlayer(QFrame):
 
         self._controls_widget = QFrame(self)
         self._controls_widget.setObjectName("transportControls")
-        self._controls_widget.setFixedSize(INNER_WIDTH, TRANSPORT_HEIGHT)
+        self._controls_widget.setFixedHeight(TRANSPORT_HEIGHT)
+        self._controls_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         controls = QHBoxLayout(self._controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(12)
+        controls.setSpacing(8)
         self._play_btn = IconButton("icon-play.png", self, size=32)
         self._play_btn.clicked.connect(self._toggle_play)
         controls.addWidget(self._play_btn)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 0)
-        self._slider.setMinimumWidth(160)
+        self._slider.setMinimumWidth(80)
         self._slider.sliderPressed.connect(self._on_slider_press)
         self._slider.sliderReleased.connect(self._on_slider_release)
         controls.addWidget(self._slider, 1)
@@ -986,7 +1147,7 @@ class VideoPlayer(QFrame):
         self._time_label = QLabel("0:00 / 0:00")
         self._time_label.setObjectName("muted")
         self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._time_label.setFixedWidth(88)
+        self._time_label.setFixedWidth(72)
         controls.addWidget(self._time_label)
 
         self._mute_btn = IconButton("icon-volume.png", self, size=32)
@@ -997,7 +1158,7 @@ class VideoPlayer(QFrame):
         self._volume_slider.setObjectName("volumeSlider")
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(88)
+        self._volume_slider.setFixedWidth(64)
         self._volume_slider.valueChanged.connect(self._on_volume_changed)
         controls.addWidget(self._volume_slider)
 
@@ -1015,33 +1176,39 @@ class VideoPlayer(QFrame):
         )
         QTimer.singleShot(0, self._refresh_video_masks)
 
+    def sizeHint(self) -> QSize:  # type: ignore[override]
+        return QSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+
+    def minimumSizeHint(self) -> QSize:  # type: ignore[override]
+        return QSize(MIN_VIDEO_WIDTH, MIN_VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._position_overlay_buttons()
+        self._refresh_video_masks()
+        self._scale_preview()
+
     def _position_overlay_buttons(self) -> None:
-        self._clear_btn.move(INNER_WIDTH - self._clear_btn.width() - 12, 12)
+        width = self._video_box.width()
+        height = self._video_box.height()
+        self._clear_btn.move(max(0, width - self._clear_btn.width() - 12), 12)
         self._fullscreen_btn.move(
-            INNER_WIDTH - self._fullscreen_btn.width() - 12,
-            VIDEO_SURFACE_HEIGHT - self._fullscreen_btn.height() - 12,
+            max(0, width - self._fullscreen_btn.width() - 12),
+            max(0, height - self._fullscreen_btn.height() - 12),
         )
 
     def _refresh_video_masks(self) -> None:
-        for widget in (self._video_box, self._placeholder, self._preview, self._video):
-            if widget.width() > 0 and widget.height() > 0:
-                self._apply_rounded_mask(widget)
-
-    def _apply_rounded_mask(self, widget: QWidget) -> None:
-        mask = QBitmap(widget.size())
-        mask.fill(Qt.GlobalColor.color0)
-        painter = QPainter(mask)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setBrush(Qt.GlobalColor.color1)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(widget.rect(), 16, 16)
-        painter.end()
-        widget.setMask(mask)
+        if self._video_box.width() > 0 and self._video_box.height() > 0:
+            self._corner_overlay.setGeometry(self._video_box.rect())
+            self._corner_overlay.raise_()
+            self._clear_btn.raise_()
+            self._fullscreen_btn.raise_()
 
     def load(self, path: str) -> None:
         self.stop()
         self._source_path = path
         self._duration = 0
+        self._preview_source = None
         self._media_is_image = Path(path).suffix.lower() in IMAGE_EXTENSIONS
         if self._media_is_image:
             self._player.setSource(QUrl())
@@ -1118,17 +1285,22 @@ class VideoPlayer(QFrame):
             self._placeholder.setText(Path(path).name)
             self._video_stack.setCurrentWidget(self._placeholder)
             return
-        target = QSize(INNER_WIDTH - 12, VIDEO_SURFACE_HEIGHT - 12)
+        self._preview_source = pixmap
+        self._scale_preview()
+        self._preview.setText("")
+        self._video_stack.setCurrentWidget(self._preview)
+        QTimer.singleShot(0, self._refresh_video_masks)
+
+    def _scale_preview(self) -> None:
+        if self._preview_source is None or self._preview.width() <= 0 or self._preview.height() <= 0:
+            return
         self._preview.setPixmap(
-            pixmap.scaled(
-                target,
+            self._preview_source.scaled(
+                self._preview.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
-        self._preview.setText("")
-        self._video_stack.setCurrentWidget(self._preview)
-        QTimer.singleShot(0, self._refresh_video_masks)
 
     def _first_frame_pixmap(self, path: str) -> QPixmap | None:
         try:
@@ -1149,18 +1321,41 @@ class VideoPlayer(QFrame):
     def _open_fullscreen(self) -> None:
         if not self._source_path or self._media_is_image:
             return
-        dialog = FullscreenVideoDialog(
-            self.window(),
+        if self._fullscreen_overlay is not None:
+            return
+        should_play = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        position = self._player.position()
+        volume = self._audio.volume()
+        muted = self._audio.isMuted()
+        self._player.pause()
+        parent = self.window().centralWidget() or self.window()
+        overlay = InlineVideoOverlay(
+            parent,
             self._source_path,
-            self._player.position(),
-            self._audio.volume(),
-            self._audio.isMuted(),
-            self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
+            position,
+            volume,
+            muted,
+            should_play,
         )
-        dialog.showNormal()
-        dialog.raise_()
-        dialog.activateWindow()
-        dialog.exec()
+        self._fullscreen_overlay = overlay
+        overlay.closed.connect(self._on_fullscreen_closed)
+        overlay.setGeometry(parent.rect())
+        overlay.show()
+        overlay.raise_()
+        overlay.setFocus()
+
+    def _on_fullscreen_closed(self, position: int, volume: float, muted: bool, should_play: bool) -> None:
+        self._fullscreen_overlay = None
+        self._audio.setVolume(volume)
+        self._audio.setMuted(muted)
+        if self._player.source().isEmpty():
+            return
+        self._player.setPosition(max(0, position))
+        if should_play:
+            self._video_stack.setCurrentWidget(self._video)
+            self._player.play()
+        else:
+            self._player.pause()
 
     def _update_volume_icon(self) -> None:
         muted = self._audio.isMuted() or self._volume_slider.value() == 0
@@ -1173,12 +1368,16 @@ class VideoPlayer(QFrame):
         self._time_label.setText(f"{fmt(position)} / {fmt(duration)}")
 
     def cleanup(self) -> None:
+        if self._fullscreen_overlay is not None:
+            self._fullscreen_overlay.close()
+            self._fullscreen_overlay = None
         self.stop()
         self._player.setSource(QUrl())
         self._source_path = None
         self._media_is_image = False
         self._duration = 0
         self._preview.clear()
+        self._preview_source = None
         self._placeholder.setText("尚未加载视频")
         self._video_stack.setCurrentWidget(self._placeholder)
         self._slider.setRange(0, 0)
@@ -1204,7 +1403,8 @@ class DropPanel(QFrame):
         super().__init__()
         self.setObjectName("dropPanel")
         self.setAcceptDrops(True)
-        self.setFixedSize(INNER_WIDTH, VIDEO_SURFACE_HEIGHT)
+        self.setMinimumSize(MIN_VIDEO_WIDTH, MIN_VIDEO_SURFACE_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -1334,7 +1534,7 @@ class ContourControlWindow(QMainWindow):
         self.setWindowTitle(APP_TITLE)
         if sys.platform != "darwin":
             self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
-        self.setMinimumSize(QSize(WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.setMinimumSize(QSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         icon_path = _asset_path(APP_ICON_ICO)
         if icon_path.is_file():
@@ -1361,9 +1561,18 @@ class ContourControlWindow(QMainWindow):
         top_margin = 16 if sys.platform == "darwin" else 4
         content.setContentsMargins(16, top_margin, 16, 16)
         content.setSpacing(24)
-        content.addWidget(self._build_left_panel(), 0)
-        content.addWidget(self._build_right_panel(), 0)
-        main.addLayout(content)
+        content.addWidget(self._build_left_panel(), 1)
+        content.addWidget(self._build_right_panel(), 1)
+        content.setStretch(0, 1)
+        content.setStretch(1, 1)
+        main.addLayout(content, 1)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        parent = self.centralWidget()
+        overlay = parent.findChild(InlineVideoOverlay) if parent is not None else None
+        if overlay is not None:
+            overlay.setGeometry(parent.rect())
 
     def _build_menubar(self) -> None:
         mb = self.menuBar()
@@ -1493,7 +1702,8 @@ class ContourControlWindow(QMainWindow):
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
-        panel.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
+        panel.setMinimumWidth(360)
+        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -1504,12 +1714,13 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(section)
 
         media_area = QWidget()
-        media_area.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+        media_area.setMinimumHeight(MIN_VIDEO_SURFACE_HEIGHT + 12 + TRANSPORT_HEIGHT)
+        media_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.input_media_stack = QStackedLayout(media_area)
         self.input_media_stack.setContentsMargins(0, 0, 0, 0)
 
         empty_media = QWidget()
-        empty_media.setFixedSize(INNER_WIDTH, MEDIA_AREA_HEIGHT)
+        empty_media.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._empty_input_media = empty_media
         empty_layout = QVBoxLayout(empty_media)
         empty_layout.setContentsMargins(0, 0, 0, 0)
@@ -1525,7 +1736,7 @@ class ContourControlWindow(QMainWindow):
         self._src_player.cleared.connect(self._clear_input)
         self.input_media_stack.addWidget(self._src_player)
         self.input_media_stack.setCurrentWidget(empty_media)
-        layout.addWidget(media_area)
+        layout.addWidget(media_area, 1)
 
         settings_title = QLabel("转换参数")
         settings_title.setObjectName("sectionTitle")
@@ -1559,7 +1770,8 @@ class ContourControlWindow(QMainWindow):
         self.smoothing_slider.valueChanged.connect(lambda value: self.smoothing_value.setText(str(value)))
 
         model_row_widget = QWidget()
-        model_row_widget.setFixedSize(INNER_WIDTH, 40)
+        model_row_widget.setFixedHeight(40)
+        model_row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         model_row = QHBoxLayout(model_row_widget)
         model_row.setContentsMargins(0, 0, 0, 0)
         model_row.setSpacing(12)
@@ -1570,7 +1782,8 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(model_row_widget)
 
         resolution_row_widget = QWidget()
-        resolution_row_widget.setFixedSize(INNER_WIDTH, 40)
+        resolution_row_widget.setFixedHeight(40)
+        resolution_row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         resolution_row = QHBoxLayout(resolution_row_widget)
         resolution_row.setContentsMargins(0, 0, 0, 0)
         resolution_row.setSpacing(12)
@@ -1580,7 +1793,8 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(resolution_row_widget)
 
         smoothing_row_widget = QWidget()
-        smoothing_row_widget.setFixedSize(INNER_WIDTH, 24)
+        smoothing_row_widget.setFixedHeight(24)
+        smoothing_row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         smoothing_row = QHBoxLayout(smoothing_row_widget)
         smoothing_row.setContentsMargins(0, 0, 0, 0)
         smoothing_row.setSpacing(12)
@@ -1599,7 +1813,8 @@ class ContourControlWindow(QMainWindow):
         layout.addWidget(self.preserve_audio_check)
 
         output_row_widget = QWidget()
-        output_row_widget.setFixedSize(INNER_WIDTH, 36)
+        output_row_widget.setFixedHeight(36)
+        output_row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         output_row = QHBoxLayout(output_row_widget)
         output_row.setContentsMargins(0, 0, 0, 0)
         self.output_dir_label = QLabel("输出到： 跟随输入视频")
@@ -1624,7 +1839,8 @@ class ContourControlWindow(QMainWindow):
     def _build_right_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("panel")
-        panel.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
+        panel.setMinimumWidth(360)
+        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -1636,7 +1852,7 @@ class ContourControlWindow(QMainWindow):
 
         self._video_player = VideoPlayer()
         self._video_player.cleared.connect(self._clear_output)
-        layout.addWidget(self._video_player)
+        layout.addWidget(self._video_player, 1)
 
         status_title = QLabel("任务状态")
         status_title.setObjectName("sectionTitle")
@@ -1649,7 +1865,8 @@ class ContourControlWindow(QMainWindow):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedSize(INNER_WIDTH, 14)
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.progress_bar)
 
         self.progress_label = QLabel("选择一个视频或图片后开始转换。")
@@ -1661,12 +1878,15 @@ class ContourControlWindow(QMainWindow):
         self.log_box.setObjectName("logBox")
         self.log_box.setReadOnly(True)
         self.log_box.setPlaceholderText("转换进度和模型下载状态会显示在这里")
-        self.log_box.setFixedSize(INNER_WIDTH, 164)
+        self.log_box.setMinimumHeight(120)
+        self.log_box.setMaximumHeight(220)
+        self.log_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.log_box)
 
         result = QFrame()
         result.setObjectName("resultPanel")
-        result.setFixedSize(INNER_WIDTH, 72)
+        result.setFixedHeight(72)
+        result.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         result_layout = QHBoxLayout(result)
         result_layout.setContentsMargins(12, 10, 12, 10)
         result_layout.setSpacing(12)
@@ -1863,8 +2083,15 @@ class ContourControlWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.output_path))
 
     def _open_output_folder(self) -> None:
-        if self.output_path:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.output_path).parent)))
+        if not self.output_path:
+            return
+        output_path = Path(self.output_path).resolve()
+        if os.name == "nt":
+            # Explorer opens the containing folder and selects the generated
+            # file; it never launches the video itself.
+            subprocess.Popen(["explorer.exe", f"/select,{output_path}"])
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path.parent)))
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.worker_thread is not None and self.worker_thread.isRunning():
@@ -2086,6 +2313,56 @@ def apply_style(app: QApplication) -> None:
         }
         QPushButton#videoCloseButton:pressed {
             background: #B91C1C;
+        }
+        QFrame#fullscreenOverlay {
+            background: rgba(0, 0, 0, 205);
+            border: none;
+        }
+        QLabel#fullscreenTitle {
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QFrame#fullscreenVideoFrame {
+            background: #000000;
+            border: 1px solid rgba(255, 255, 255, 45);
+            border-radius: 16px;
+        }
+        QVideoWidget#fullscreenVideoWidget {
+            background: #000000;
+        }
+        QFrame#fullscreenControls {
+            background: rgba(15, 24, 40, 235);
+            border: 1px solid rgba(255, 255, 255, 60);
+            border-radius: 12px;
+        }
+        QLabel#fullscreenTimeLabel {
+            color: #FFFFFF;
+            font-size: 12px;
+        }
+        QPushButton#fullscreenCloseButton {
+            background: rgba(15, 24, 40, 235);
+            color: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 120);
+            border-radius: 8px;
+            font-size: 20px;
+            font-weight: 400;
+        }
+        QPushButton#fullscreenCloseButton:hover {
+            background: #DC2626;
+            border-color: #FFFFFF;
+        }
+        QFrame#fullscreenControls QPushButton#iconButton {
+            background: rgba(255, 255, 255, 20);
+        }
+        QFrame#fullscreenControls QPushButton#iconButton:hover {
+            background: rgba(255, 255, 255, 45);
+        }
+        QFrame#fullscreenControls QSlider::groove:horizontal {
+            background: rgba(255, 255, 255, 70);
+        }
+        QFrame#fullscreenControls QSlider::handle:horizontal {
+            background: #FFFFFF;
         }
         QComboBox {
             background: #FFFFFF;

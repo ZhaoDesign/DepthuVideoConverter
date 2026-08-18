@@ -48,7 +48,7 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 
 ## 3. 当前 UI 行为约定
 
-- 主窗口：无边框、约 `1110 × 852`，左输入/参数栏，右深度视频/状态栏。
+- 主窗口：无边框、默认约 `1110 × 852`，最小 `900 × 680`；左输入/参数栏，右深度视频/状态栏。两列面板和播放器使用弹性布局，最大化时随窗口扩展，不再固定缩在中间。
 - 输入支持拖放和“选择视频”；输出目录默认跟随输入目录，也可以手动选择。
 - 模型菜单只显示 Small、Base、Large 三个受支持模型定义；模型文件优先使用项目 `models/` 目录，原生桌面默认使用本地 PyTorch 后端。
 - 分辨率支持 Original、480p、720p、1080p，并按输入宽高比计算输出尺寸。
@@ -57,6 +57,9 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - 输出重名时生成带时间戳的 `*_depth_YYYYMMDD-HHMMSS.mp4`，不覆盖旧文件。
 - 下拉弹窗优先向下展开；屏幕底部空间不足时才向上展开。模型三项菜单不显示滚动条。
 - 鼠标点击“选择视频”后不应留下 Windows 原生焦点虚线框。
+- 视频预览最大化必须在原窗口内显示黑色半透明遮罩，不创建新的系统窗口；遮罩内提供播放/暂停、进度、时间、静音和音量控件，并可用关闭按钮或 Esc 退出。
+- “打开文件夹”在 Windows 使用 Explorer `/select` 定位并选中生成的输出文件，不启动视频播放器。
+- 视频圆角不使用 1-bit `QBitmap` 裁剪；使用抗锯齿角落覆盖层，避免圆角边缘出现颗粒和锯齿。
 - 转换期间输入区域、源视频控件和参数控件锁定；成功后恢复并启用“打开视频/打开文件夹”。
 
 ## 3.1 与 SwiftSteed/DepthVideoConverter 的功能对齐
@@ -79,6 +82,8 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - `depth_converter/ffmpeg.py`：FFmpeg 输出按 bytes 解码，修复音频抽取/合成时的文本解码错误。
 - `depth_converter/models.py`：支持 `DEPTH_MODELS_DIR`，并提供模型缓存清理；避免切换模型目录后仍使用旧缓存。
 - `desktop_qt_app.py`：从参考项目迁移原生窗口结构；增加稳定启动、字体回退、模型目录同步、输入/输出状态和转换线程修复。
+- `desktop_qt_app.py`：主窗口、输入区域、播放器和状态面板改为弹性布局；预览放大改为同窗遮罩层并保留播放状态、进度和音量。
+- `desktop_qt_app.py`：输出文件夹使用 Explorer 选中文件；视频圆角改为抗锯齿覆盖层，移除易产生锯齿的位图 mask。
 - `desktop_qt_app.py`：支持视频/图片导入，图片自动隐藏音频与播放控件，并按输入类型选择 MP4/PNG 输出。
 - `FigmaComboBox`：按屏幕可用区域定位弹窗，关闭不必要的水平/垂直滚动条。
 - `MouseFocusClearingButton`：保留键盘焦点能力，同时清除鼠标点击后的虚线焦点框。
@@ -104,6 +109,7 @@ desktop_launcher.py -> desktop_qt_app.py -> depth_converter/
 - Windows 批处理启动烟测：CRLF 修复后，`start_desktop.cmd` 可启动 `desktop_launcher.py`。
 - Windows 联网安装器和离线分卷安装器均已在隔离目录完成安装烟测；运行时验证通过，安装不要求重启。
 - 安装包 SHA256、大小和分卷文件名记录在 `docs/WINDOWS_INSTALLER_HANDOFF.md`，不要只凭文件名判断离线包是否完整。
+- 当前 UI 回归：`verify_desktop_delivery.py` 已覆盖默认窗口、最大化/缩小弹性尺寸、同窗预览遮罩及播放控件存在性。
 
 ## 7. Git 协作规则
 
